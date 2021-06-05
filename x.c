@@ -36,15 +36,6 @@ typedef struct {
 	uint  release;
 } MouseShortcut;
 
-typedef struct {
-	KeySym k;
-	uint mask;
-	char *s;
-	/* three-valued logic variables: 0 indifferent, 1 on, -1 off */
-	signed char appkey;    /* application keypad */
-	signed char appcursor; /* application cursor */
-} Key;
-
 /* X modifiers */
 #define XK_ANY_MOD    UINT_MAX
 #define XK_NO_MOD     0
@@ -183,7 +174,6 @@ static void selrequest(XEvent *);
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
 static void mousereport(XEvent *);
-static char *kmap(KeySym, uint);
 static int match(uint, uint);
 
 static void run(void);
@@ -1761,41 +1751,10 @@ match(uint mask, uint state)
 	return mask == XK_ANY_MOD || mask == (state & ~ignoremod);
 }
 
-char*
-kmap(KeySym k, uint state)
+int
+scmatch(uint state, uint set, uint clr)
 {
-	Key *kp;
-	int i;
-
-	/* Check for mapped keys out of X11 function keys. */
-	for (i = 0; i < LEN(mappedkeys); i++) {
-		if (mappedkeys[i] == k)
-			break;
-	}
-	if (i == LEN(mappedkeys)) {
-		if ((k & 0xFFFF) < 0xFD00)
-			return NULL;
-	}
-
-	for (kp = key; kp < key + LEN(key); kp++) {
-		if (kp->k != k)
-			continue;
-
-		if (!match(kp->mask, state))
-			continue;
-
-		if (IS_SET(MODE_APPKEYPAD) ? kp->appkey < 0 : kp->appkey > 0)
-			continue;
-		if (IS_SET(MODE_NUMLOCK) && kp->appkey == 2)
-			continue;
-
-		if (IS_SET(MODE_APPCURSOR) ? kp->appcursor < 0 : kp->appcursor > 0)
-			continue;
-
-		return kp->s;
-	}
-
-	return NULL;
+	return (set & ~state) | (clr & state) == 0;
 }
 
 void
@@ -1803,11 +1762,13 @@ kpress(XEvent *ev)
 {
 	XKeyEvent *e = &ev->xkey;
 	KeySym ksym;
-	char buf[64], *customkey;
+	char buf[64];
 	int len;
 	Rune c;
 	Status status;
 	Shortcut *bp;
+	Key *k;
+	uint state;
 
 	if (IS_SET(MODE_KBDLOCK))
 		return;
@@ -1816,6 +1777,7 @@ kpress(XEvent *ev)
 		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &ksym, &status);
 	else
 		len = XLookupString(e, buf, sizeof buf, &ksym, NULL);
+
 	/* 1. shortcuts */
 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
 		if (ksym == bp->keysym && match(bp->mod, e->state)) {
@@ -1825,26 +1787,52 @@ kpress(XEvent *ev)
 	}
 
 	/* 2. custom keys from config.h */
-	if ((customkey = kmap(ksym, e->state))) {
-		ttywrite(customkey, strlen(customkey), 1);
+	state = (IS_SET(MODE_APPCURSOR) ? CURS : 0)
+		| (IS_SET(MODE_APPKEYPAD) ? KPAD : 0)
+		| (IS_SET(MODE_NUMLOCK) ? NMLK : 0)
+		| (e->state&ShiftMask ? S : 0)
+		| (e->state&Mod1Mask ? A : 0)
+		| (e->state&ControlMask ? C : 0);
+	for (k = keys; k < keys + LEN(keys); k++) {
+		if (k->sym == ksym && scmatch(state, k->set, k->clr)) {
+			len = k->fn(buf, sizeof buf, ksym, state, k->arg);
+			ttywrite(buf, len, 1);
+			return
+		}
+	}
+
+	/* 3. latin 1 */
+	if (0x20 <= ksym && ksym < 0x7f) {
+		if ((state&C) > 0 && !(0x40 <= ksym && ksym < 0x60)) {
+			len = kcsi(buf, sizeof buf, state, ksym, S, 'u');
+			ttywrite(buf, len, 1);
+			return;
+		}
+		buf[0] = ksym;
+		len = 1;
+		if (state&C > 0)
+			buf[0] -= 0x40;
+		if (state&A > 0) {
+			buf[0] = '\033';
+			buf[1] = ksym;
+			len = 2;
+		}
+		ttywrite(buf, len, 1);
 		return;
 	}
 
-	/* 3. composed string from input method */
 	if (len == 0)
 		return;
-	if (len == 1 && e->state & Mod1Mask) {
-		if (IS_SET(MODE_8BIT)) {
-			if (*buf < 0177) {
-				c = *buf | 0x80;
-				len = utf8encode(c, buf);
-			}
-		} else {
-			buf[1] = buf[0];
-			buf[0] = '\033';
-			len = 2;
-		}
+
+	/* 4. modified UTF8-encoded unicode */
+	if (state&ALLM > 0 && utf8decode(buf, &c, len) == len
+			&& c != UTF_INVALID) {
+		len = kcsi(buf, sizeof buf, state, c, S, 'u');
+		ttywrite(buf, len, 1);
+		return;
 	}
+
+	/* 5. composed string from input method */
 	ttywrite(buf, len, 1);
 }
 

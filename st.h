@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#define UTF_INVALID   0xFFFD
+
 /* macros */
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
 #define MAX(a, b)		((a) < (b) ? (b) : (a))
@@ -105,6 +107,7 @@ void selextend(int, int, int, int);
 int selected(int, int);
 char *getsel(void);
 
+size_t utf8decode(const char *, Rune *, size_t);
 size_t utf8encode(Rune, char *);
 
 void *xmalloc(size_t);
