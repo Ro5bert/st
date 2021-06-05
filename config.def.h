@@ -234,6 +234,196 @@ static KeySym mappedkeys[] = { -1 };
  */
 static uint ignoremod = Mod2Mask|XK_SWITCH_MOD;
 
+typedef union {
+	struct {
+		uint l;
+		char *s;
+	} str;
+	struct {
+		uint n;
+		uchar m;
+		char c;
+	} csi;
+} KeyArg;
+
+typedef int (*KeyEncoder)(char *buf, size_t len,
+		KeySym sym, uint mod, KeyArg arg);
+
+typedef struct {
+	/* Tristate logic. Each bit in set/clr is interpreted as follows:
+	 * set  clr
+	 *  0    0    don't care
+	 *  0    1    bit must be clear
+	 *  1    0    bit must be set
+	 *  1    1    unsatisfiable (i.e., useless configuration) */
+	KeySym sym;
+	uint set, clr;
+	KeyEncoder fn;
+	KeyArg arg;
+} Key;
+
+int
+kencstr(char *buf, size_t len, KeySym sym, uint state, KeyArg arg)
+{
+	size_t i;
+
+	for (i = 0; i < len-1 && i < arg.str.l; i++)
+		buf[i] = arg.str.s[i];
+	if (len > 0)
+		buf[i] = '\0';
+	return i;
+}
+
+int
+kenccsi(char *buf, size_t len, KeySym sym, uint state, KeyArg arg)
+{
+	uint mod;
+
+	mod = (state >> MODOFFS) & ~arg.csi.m;
+	if (mod > 0)
+		return snprintf(buf, len, "\033[%d;%d%c", arg.csi.n, mod+1, arg.csi.c);
+	else if (n > 1)
+		return snprintf(buf, len, "\033[%d%c", arg.csi.n, arg.csi.c);
+	else
+		return snprintf(buf, len, "\033[%c", arg.csi.c);
+}
+
+#define CURS (1<<0)
+#define KPAD (1<<1)
+#define NMLK (1<<2)
+#define MODOFFS 3
+#define S    (1<<3)
+#define A    (1<<4)
+#define C    (1<<5)
+#define ALLM (S|A|C)
+
+#define STR(s) kencstr, .arg.str.l = sizeof(s)-1, .arg.str.s = (s)
+#define CSI(n_,m_,c_) kenccsi, .arg.csi.n = (n_), .arg.csi.m = (m_), .arg.csi.c = (c_)
+#define TILDE(n) CSI((n),0,'~')
+#define UNICODE(cp) CSI((cp),S,'u')
+
+Key keys[] = {
+	/* SHORTCUTS (must be first) */
+	/* XK_Print */
+	/* XK_Break */
+	/* XK_Num_Lock */
+
+	/* LATIN1 */
+	{ XK_space,          C,  A|S,  STR("\0")     },
+	{ XK_space,        C|A,    S,  STR("\033\0") },
+	{ XK_at,             C,    0,  UNICODE('@')  }, /* '@'-64 is NUL */
+	{ XK_O,              A,    0,  UNICODE('O')  }, /* ESC O  is SS3 */
+	{ XK_i,              C,    0,  UNICODE('i')  }, /* 'i'-64 is tab */
+	{ XK_m,              C,    0,  UNICODE('m')  }, /* 'm'-64 is CR  */
+	{ XK_bracketleft,    C,    0,  UNICODE('[')  }, /* '['-64 is ESC */
+	{ XK_bracketleft,    A,    0,  UNICODE('[')  }, /* ESC [  is CSI */
+
+	/* MISC */
+	{ XK_BackSpace,     0,  ALLM,  STR("\177")     },
+	{ XK_BackSpace,     A,   C|S,  STR("\033\177") },
+	{ XK_BackSpace,     0,     0,  CSI(127,0,'u')  },
+	{ XK_Tab,           0,  ALLM,  STR("\t")       },
+	{ XK_Tab,           A,   C|S,  STR("\033\t")   },
+	{ XK_Tab,           S,     0,  CSI(1,S,'Z')    },
+	{ XK_Tab,           0,     0,  CSI('\t',0,'u') },
+	{ XK_Return,        0,  ALLM,  STR("\r")       },
+	{ XK_Return,        A,   C|S,  STR("\033\r")   },
+	{ XK_Return,        0,     0,  CSI('\r',0,'u') },
+	{ XK_Escape,        0,  ALLM,  STR("\033")     },
+	{ XK_Escape,        A,   C|S,  STR("\033\033") },
+	{ XK_Escape,        0,     0,  CSI(27,0,'u')   },
+	{ XK_Delete,        0,     0,  TILDE(3)        },
+	{ XK_Home,       CURS,  ALLM,  STR("\033OH")   },
+	{ XK_Home,          0,     0,  CSI(1,0,'H')    },
+	{ XK_Left,       CURS,  ALLM,  STR("\033OD")   },
+	{ XK_Left,          0,     0,  CSI(1,0,'D')    },
+	{ XK_Up,         CURS,  ALLM,  STR("\033OA")   },
+	{ XK_Up,            0,     0,  CSI(1,0,'A')    },
+	{ XK_Right,      CURS,  ALLM,  STR("\033OC")   },
+	{ XK_Right,         0,     0,  CSI(1,0,'C')    },
+	{ XK_Down,       CURS,  ALLM,  STR("\033OB")   },
+	{ XK_Down,          0,     0,  CSI(1,0,'B')    },
+	{ XK_Prior,         0,     0,  TILDE(5)        },
+	{ XK_Next,          0,     0,  TILDE(6)        },
+	{ XK_End,        CURS,  ALLM,  STR("\033OF")   },
+	{ XK_End,           0,     0,  CSI(1,0,'F')    },
+	{ XK_Begin,         0,     0,  CSI(1,0,'E')    },
+	{ XK_Select,        0,     0,  TILDE(4)        },
+	{ XK_Insert,        0,     0,  TILDE(2)        },
+	{ XK_Find,          0,     0,  TILDE(1)        },
+
+	/* KEYPAD */
+	{ XK_KP_Enter,      KPAD,  NKLK|ALLM,  STR("\033OM")   },
+	{ XK_KP_Enter,         0,       ALLM,  STR("\r")       },
+	{ XK_KP_Enter,         A,        C|S,  STR("\033\r")   },
+	{ XK_KP_Enter,         0,          0,  CSI('\r',0,'u') },
+	{ XK_KP_F1,            0,       ALLM,  STR("\033OP")   },
+	{ XK_KP_F1,            0,          0,  CSI(1,0,'P')    },
+	{ XK_KP_F2,            0,       ALLM,  STR("\033OQ")   },
+	{ XK_KP_F2,            0,          0,  CSI(1,0,'Q')    },
+	{ XK_KP_F3,            0,       ALLM,  STR("\033OR")   },
+	{ XK_KP_F3,            0,          0,  CSI(1,0,'R')    },
+	{ XK_KP_F4,            0,       ALLM,  STR("\033OS")   },
+	{ XK_KP_F4,            0,          0,  CSI(1,0,'S')    },
+	{ XK_KP_Home,       CURS,       ALLM,  STR("\033OH")   },
+	{ XK_KP_Home,          0,          0,  CSI(1,0,'H')    },
+	{ XK_KP_Left,       CURS,       ALLM,  STR("\033OD")   },
+	{ XK_KP_Left,          0,          0,  CSI(1,0,'D')    },
+	{ XK_KP_Up,         CURS,       ALLM,  STR("\033OA")   },
+	{ XK_KP_Up,            0,          0,  CSI(1,0,'A')    },
+	{ XK_KP_Right,      CURS,       ALLM,  STR("\033OC")   },
+	{ XK_KP_Right,         0,          0,  CSI(1,0,'C')    },
+	{ XK_KP_Down,       CURS,       ALLM,  STR("\033OB")   },
+	{ XK_KP_Down,          0,          0,  CSI(1,0,'B')    },
+	{ XK_KP_Prior,         0,          0,  TILDE(5)        },
+	{ XK_KP_Next,          0,          0,  TILDE(6)        },
+	{ XK_KP_End,        CURS,       ALLM,  STR("\033OF")   },
+	{ XK_KP_End,           0,          0,  CSI(1,0,'F')    },
+	{ XK_KP_Begin,         0,          0,  CSI(1,0,'E')    },
+	{ XK_KP_Insert,        0,          0,  TILDE(2)        },
+	{ XK_KP_Delete,        0,          0,  TILDE(3)        },
+	{ XK_KP_Equal,      KPAD,  NKLK|ALLM,  STR("\033OX")   },
+	{ XK_KP_Multiply,   KPAD,  NMLK|ALLM,  STR("\033Oj")   },
+	{ XK_KP_Add,        KPAD,  NMLK|ALLM,  STR("\033Ok")   },
+	{ XK_KP_Separator,  KPAD,  NMLK|ALLM,  STR("\033Ol")   },
+	{ XK_KP_Subtract,   KPAD,  NMLK|ALLM,  STR("\033Om")   },
+	{ XK_KP_Decimal,    KPAD,  NMLK|ALLM,  STR("\033On")   },
+	{ XK_KP_Divide,     KPAD,  NMLK|ALLM,  STR("\033Oo")   },
+	{ XK_KP_0,          KPAD,  NMLK|ALLM,  STR("\033Op")   },
+	{ XK_KP_1,          KPAD,  NMLK|ALLM,  STR("\033Oq")   },
+	{ XK_KP_2,          KPAD,  NMLK|ALLM,  STR("\033Or")   },
+	{ XK_KP_3,          KPAD,  NMLK|ALLM,  STR("\033Os")   },
+	{ XK_KP_4,          KPAD,  NMLK|ALLM,  STR("\033Ot")   },
+	{ XK_KP_5,          KPAD,  NMLK|ALLM,  STR("\033Ou")   },
+	{ XK_KP_6,          KPAD,  NMLK|ALLM,  STR("\033Ov")   },
+	{ XK_KP_7,          KPAD,  NMLK|ALLM,  STR("\033Ow")   },
+	{ XK_KP_8,          KPAD,  NMLK|ALLM,  STR("\033Ox")   },
+	{ XK_KP_9,          KPAD,  NMLK|ALLM,  STR("\033Oy")   },
+
+	/* FUNCTION */
+	{ XK_F1,   0,  0,  TILDE(11) },
+	{ XK_F2,   0,  0,  TILDE(12) },
+	{ XK_F3,   0,  0,  TILDE(13) },
+	{ XK_F4,   0,  0,  TILDE(14) },
+	{ XK_F5,   0,  0,  TILDE(15) },
+	{ XK_F6,   0,  0,  TILDE(17) },
+	{ XK_F7,   0,  0,  TILDE(18) },
+	{ XK_F8,   0,  0,  TILDE(19) },
+	{ XK_F9,   0,  0,  TILDE(20) },
+	{ XK_F10,  0,  0,  TILDE(21) },
+	{ XK_F11,  0,  0,  TILDE(23) },
+	{ XK_F12,  0,  0,  TILDE(24) },
+	{ XK_F13,  0,  0,  TILDE(25) },
+	{ XK_F14,  0,  0,  TILDE(26) },
+	{ XK_F15,  0,  0,  TILDE(28) },
+	{ XK_F16,  0,  0,  TILDE(29) },
+	{ XK_F17,  0,  0,  TILDE(31) },
+	{ XK_F18,  0,  0,  TILDE(32) },
+	{ XK_F19,  0,  0,  TILDE(33) },
+	{ XK_F20,  0,  0,  TILDE(34) },
+};
+
+
 /*
  * This is the huge key array which defines all compatibility to the Linux
  * world. Please decide about changes wisely.
