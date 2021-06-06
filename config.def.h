@@ -204,6 +204,20 @@ static Shortcut shortcuts[] = {
  */
 static uint ignoremod = Mod2Mask|XK_SWITCH_MOD;
 
+#define CURS (1<<0)
+#define KPAD (1<<1)
+#define NMLK (1<<2)
+#define MODOFFS 3
+#define S    (1<<3)
+#define A    (1<<4)
+#define C    (1<<5)
+#define ALLM (S|A|C)
+
+#define STR(s_) kencstr, .arg.str.l = sizeof(s_)-1, .arg.str.s = (s_)
+#define CSI(n_,m_,c_) kenccsi, .arg.csi.n = (n_), .arg.csi.m = (m_), .arg.csi.c = (c_)
+#define TILDE(n) CSI((n),0,'~')
+#define UNICODE(cp) CSI((cp),S,'u')
+
 typedef union {
 	struct {
 		uint l;
@@ -249,34 +263,20 @@ kcsi(char *buf, size_t len, uint state, uint n, uchar m, char c)
 {
 	uint mod;
 
-	mod = (state >> MODOFFS) & ~arg.csi.m;
+	mod = (state & ~m) >> MODOFFS;
 	if (mod > 0)
-		return snprintf(buf, len, "\033[%d;%d%c", arg.csi.n, mod+1, arg.csi.c);
+		return snprintf(buf, len, "\033[%d;%d%c", n, mod+1, c);
 	else if (n > 1)
-		return snprintf(buf, len, "\033[%d%c", arg.csi.n, arg.csi.c);
+		return snprintf(buf, len, "\033[%d%c", n, c);
 	else
-		return snprintf(buf, len, "\033[%c", arg.csi.c);
+		return snprintf(buf, len, "\033[%c", c);
 }
 
 int
 kenccsi(char *buf, size_t len, KeySym sym, uint state, KeyArg arg)
 {
-	kcsi(buf, len, state, arg.csi.n, arg.csi.m, arg.csi.c)
+	kcsi(buf, len, state, arg.csi.n, arg.csi.m, arg.csi.c);
 }
-
-#define CURS (1<<0)
-#define KPAD (1<<1)
-#define NMLK (1<<2)
-#define MODOFFS 3
-#define S    (1<<3)
-#define A    (1<<4)
-#define C    (1<<5)
-#define ALLM (S|A|C)
-
-#define STR(s) kencstr, .arg.str.l = sizeof(s)-1, .arg.str.s = (s)
-#define CSI(n_,m_,c_) kenccsi, .arg.csi.n = (n_), .arg.csi.m = (m_), .arg.csi.c = (c_)
-#define TILDE(n) CSI((n),0,'~')
-#define UNICODE(cp) CSI((cp),S,'u')
 
 Key keys[] = {
 	/* SHORTCUTS (must be first) */
@@ -329,7 +329,7 @@ Key keys[] = {
 	{ XK_Find,          0,     0,  TILDE(1)        },
 
 	/* KEYPAD */
-	{ XK_KP_Enter,      KPAD,  NKLK|ALLM,  STR("\033OM")   },
+	{ XK_KP_Enter,      KPAD,  NMLK|ALLM,  STR("\033OM")   },
 	{ XK_KP_Enter,         0,       ALLM,  STR("\r")       },
 	{ XK_KP_Enter,         A,        C|S,  STR("\033\r")   },
 	{ XK_KP_Enter,         0,          0,  CSI('\r',0,'u') },
@@ -358,7 +358,7 @@ Key keys[] = {
 	{ XK_KP_Begin,         0,          0,  CSI(1,0,'E')    },
 	{ XK_KP_Insert,        0,          0,  TILDE(2)        },
 	{ XK_KP_Delete,        0,          0,  TILDE(3)        },
-	{ XK_KP_Equal,      KPAD,  NKLK|ALLM,  STR("\033OX")   },
+	{ XK_KP_Equal,      KPAD,  NMLK|ALLM,  STR("\033OX")   },
 	{ XK_KP_Multiply,   KPAD,  NMLK|ALLM,  STR("\033Oj")   },
 	{ XK_KP_Add,        KPAD,  NMLK|ALLM,  STR("\033Ok")   },
 	{ XK_KP_Separator,  KPAD,  NMLK|ALLM,  STR("\033Ol")   },

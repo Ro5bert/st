@@ -1754,7 +1754,7 @@ match(uint mask, uint state)
 int
 scmatch(uint state, uint set, uint clr)
 {
-	return (set & ~state) | (clr & state) == 0;
+	return ((set & ~state) | (clr & state)) == 0;
 }
 
 void
@@ -1797,24 +1797,26 @@ kpress(XEvent *ev)
 		if (k->sym == ksym && scmatch(state, k->set, k->clr)) {
 			len = k->fn(buf, sizeof buf, ksym, state, k->arg);
 			ttywrite(buf, len, 1);
-			return
+			return;
 		}
 	}
 
 	/* 3. latin 1 */
 	if (0x20 <= ksym && ksym < 0x7f) {
-		if ((state&C) > 0 && !(0x40 <= ksym && ksym < 0x60)) {
-			len = kcsi(buf, sizeof buf, state, ksym, S, 'u');
-			ttywrite(buf, len, 1);
-			return;
-		}
 		buf[0] = ksym;
 		len = 1;
-		if (state&C > 0)
-			buf[0] -= 0x40;
-		if (state&A > 0) {
+		if ((state&C) > 0) {
+			if ('a' <= ksym && ksym <= 'z') {
+				buf[0] -= 0x60;
+			} else {
+				len = kcsi(buf, sizeof buf, state, ksym, S, 'u');
+				ttywrite(buf, len, 1);
+				return;
+			}
+		}
+		if ((state&A) > 0) {
+			buf[1] = buf[0];
 			buf[0] = '\033';
-			buf[1] = ksym;
 			len = 2;
 		}
 		ttywrite(buf, len, 1);
@@ -1825,7 +1827,7 @@ kpress(XEvent *ev)
 		return;
 
 	/* 4. modified UTF8-encoded unicode */
-	if (state&ALLM > 0 && utf8decode(buf, &c, len) == len
+	if ((state&ALLM) > 0 && utf8decode(buf, &c, len) == len
 			&& c != UTF_INVALID) {
 		len = kcsi(buf, sizeof buf, state, c, S, 'u');
 		ttywrite(buf, len, 1);
