@@ -1,4 +1,5 @@
 /* See LICENSE for license details. */
+/* Requires: util.h, st.h */
 
 enum win_mode {
 	MODE_VISIBLE     = 1 << 0,
@@ -23,6 +24,12 @@ enum win_mode {
 	                  |MODE_MOUSEMANY,
 };
 
+void xclipcopy(void);
+void xclippaste(void);
+void xselpaste(void);
+void xzoomabs(double);
+void xzoomrel(double);
+void xzoomrst(void);
 void xbell(void);
 void xclipcopy(void);
 void xdrawcursor(int, int, Glyph, int, int, Glyph);
@@ -33,7 +40,8 @@ int xsetcolorname(int, const char *);
 void xseticontitle(char *);
 void xsettitle(char *);
 int xsetcursor(int);
-void xsetmode(int, unsigned int);
+void xsetmode(int, uint);
+void xtogmode(uint);
 void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);

@@ -1,26 +1,10 @@
 /* See LICENSE for license details. */
+/* Requires: stdint.h, size_t, util.h */
 
-#include <stdint.h>
-#include <sys/types.h>
-
-#define UTF_INVALID   0xFFFD
-
-/* macros */
-#define MIN(a, b)		((a) < (b) ? (a) : (b))
-#define MAX(a, b)		((a) < (b) ? (b) : (a))
-#define LEN(a)			(sizeof(a) / sizeof(a)[0])
-#define BETWEEN(x, a, b)	((a) <= (x) && (x) <= (b))
-#define DIVCEIL(n, d)		(((n) + ((d) - 1)) / (d))
-#define DEFAULT(a, b)		(a) = (a) ? (a) : (b)
-#define LIMIT(x, a, b)		(x) = (x) < (a) ? (a) : (x) > (b) ? (b) : (x)
-#define ATTRCMP(a, b)		((a).mode != (b).mode || (a).fg != (b).fg || \
-				(a).bg != (b).bg)
-#define TIMEDIFF(t1, t2)	((t1.tv_sec-t2.tv_sec)*1000 + \
-				(t1.tv_nsec-t2.tv_nsec)/1E6)
-#define MODBIT(x, set, bit)	((set) ? ((x) |= (bit)) : ((x) &= ~(bit)))
-
-#define TRUECOLOR(r,g,b)	(1 << 24 | (r) << 16 | (g) << 8 | (b))
-#define IS_TRUECOL(x)		(1 << 24 & (x))
+#define ATTRCMP(a, b) ((a).mode != (b).mode || (a).fg != (b).fg || \
+                       (a).bg != (b).bg)
+#define TRUECOLOR(r,g,b) (1 << 24 | (r) << 16 | (g) << 8 | (b))
+#define IS_TRUECOL(x)    (1 << 24 & (x))
 
 enum glyph_attribute {
 	ATTR_NULL       = 0,
@@ -54,40 +38,23 @@ enum selection_snap {
 	SNAP_LINE = 2
 };
 
-typedef unsigned char uchar;
-typedef unsigned int uint;
-typedef unsigned long ulong;
-typedef unsigned short ushort;
-
-typedef uint_least32_t Rune;
-
 #define Glyph Glyph_
 typedef struct {
-	Rune u;           /* character code */
-	ushort mode;      /* attribute flags */
-	uint32_t fg;      /* foreground  */
-	uint32_t bg;      /* background  */
+	Rune u;      /* character code */
+	ushort mode; /* attribute flags */
+	uint32_t fg; /* foreground  */
+	uint32_t bg; /* background  */
 } Glyph;
 
 typedef Glyph *Line;
 
-typedef union {
-	int i;
-	uint ui;
-	float f;
-	const void *v;
-	const char *s;
-} Arg;
-
-void die(const char *, ...);
 void redraw(void);
 void draw(void);
 
-void printscreen(const Arg *);
-void printsel(const Arg *);
-void sendbreak(const Arg *);
-void toggleprinter(const Arg *);
-
+void ttogprinter(void);
+void tdump(void);
+void tdumpsel(void);
+void tsendbreak(void);
 int tattrset(int);
 void tnew(int, int);
 void tresize(int, int);
@@ -106,23 +73,3 @@ void selstart(int, int, int);
 void selextend(int, int, int, int);
 int selected(int, int);
 char *getsel(void);
-
-size_t utf8decode(const char *, Rune *, size_t);
-size_t utf8encode(Rune, char *);
-
-void *xmalloc(size_t);
-void *xrealloc(void *, size_t);
-char *xstrdup(const char *);
-
-/* config.h globals */
-extern char *utmp;
-extern char *scroll;
-extern char *stty_args;
-extern char *vtiden;
-extern wchar_t *worddelimiters;
-extern int allowaltscreen;
-extern int allowwindowops;
-extern char *termname;
-extern unsigned int tabspaces;
-extern unsigned int defaultfg;
-extern unsigned int defaultbg;

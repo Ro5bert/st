@@ -4,65 +4,35 @@
 #include <limits.h>
 #include <locale.h>
 #include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/select.h>
 #include <time.h>
 #include <unistd.h>
 #include <libgen.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
-#include <X11/cursorfont.h>
 #include <X11/keysym.h>
 #include <X11/Xft/Xft.h>
 #include <X11/XKBlib.h>
 
 char *argv0;
 #include "arg.h"
+#include "util.h"
+#include "config.h"
 #include "st.h"
 #include "win.h"
-
-/* types used in config.h */
-typedef struct {
-	uint mod;
-	KeySym keysym;
-	void (*func)(const Arg *);
-	const Arg arg;
-} Shortcut;
-
-typedef struct {
-	uint mod;
-	uint button;
-	void (*func)(const Arg *);
-	const Arg arg;
-	uint  release;
-} MouseShortcut;
-
-/* X modifiers */
-#define XK_ANY_MOD    UINT_MAX
-#define XK_NO_MOD     0
-#define XK_SWITCH_MOD (1<<13)
-
-/* function definitions used in config.h */
-static void clipcopy(const Arg *);
-static void clippaste(const Arg *);
-static void numlock(const Arg *);
-static void selpaste(const Arg *);
-static void zoom(const Arg *);
-static void zoomabs(const Arg *);
-static void zoomreset(const Arg *);
-static void ttysend(const Arg *);
-
-/* config.h for applying patches and the configuration. */
-#include "config.h"
 
 /* XEMBED messages */
 #define XEMBED_FOCUS_IN  4
 #define XEMBED_FOCUS_OUT 5
 
-/* macros */
-#define IS_SET(flag)		((win.mode & (flag)) != 0)
-#define TRUERED(x)		(((x) & 0xff0000) >> 8)
-#define TRUEGREEN(x)		(((x) & 0xff00))
-#define TRUEBLUE(x)		(((x) & 0xff) << 8)
+#define IS_SET(flag) ((win.mode & (flag)) != 0)
+#define TRUERED(x)   (((x) & 0xff0000) >> 8)
+#define TRUEGREEN(x) (((x) & 0xff00))
+#define TRUEBLUE(x)  (((x) & 0xff) << 8)
 
 typedef XftDraw *Draw;
 typedef XftColor Color;
@@ -174,7 +144,6 @@ static void selrequest(XEvent *);
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
 static void mousereport(XEvent *);
-static int match(uint, uint);
 
 static void run(void);
 static void usage(void);
@@ -244,8 +213,15 @@ static char *opt_title = NULL;
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
 
+/* Printable characters in ASCII. Used to estimate the advance width
+ * of single wide characters. */
+static char ascii_printable[] =
+	" !\"#$%&'()*+,-./0123456789:;<=>?"
+	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
+	"`abcdefghijklmnopqrstuvwxyz{|}~";
+
 void
-clipcopy(const Arg *dummy)
+xclipcopy(void)
 {
 	Atom clipboard;
 
@@ -260,7 +236,7 @@ clipcopy(const Arg *dummy)
 }
 
 void
-clippaste(const Arg *dummy)
+xclippaste(void)
 {
 	Atom clipboard;
 
@@ -270,52 +246,33 @@ clippaste(const Arg *dummy)
 }
 
 void
-selpaste(const Arg *dummy)
+xselpaste(void)
 {
 	XConvertSelection(xw.dpy, XA_PRIMARY, xsel.xtarget, XA_PRIMARY,
 			xw.win, CurrentTime);
 }
 
 void
-numlock(const Arg *dummy)
-{
-	win.mode ^= MODE_NUMLOCK;
-}
-
-void
-zoom(const Arg *arg)
-{
-	Arg larg;
-
-	larg.f = usedfontsize + arg->f;
-	zoomabs(&larg);
-}
-
-void
-zoomabs(const Arg *arg)
+xzoomabs(double fontsize)
 {
 	xunloadfonts();
-	xloadfonts(usedfont, arg->f);
+	xloadfonts(usedfont, fontsize);
 	cresize(0, 0);
 	redraw();
 	xhints();
 }
 
 void
-zoomreset(const Arg *arg)
+xzoomrel(double delta)
 {
-	Arg larg;
-
-	if (defaultfontsize > 0) {
-		larg.f = defaultfontsize;
-		zoomabs(&larg);
-	}
+	xzoomabs(usedfontsize+delta);
 }
 
 void
-ttysend(const Arg *arg)
+xzoomrst(void)
 {
-	ttywrite(arg->s, strlen(arg->s), 1);
+	if (defaultfontsize > 0)
+		xzoomabs(defaultfontsize);
 }
 
 int
@@ -581,12 +538,6 @@ selnotify(XEvent *e)
 	 * next data chunk in the property.
 	 */
 	XDeleteProperty(xw.dpy, xw.win, (int)property);
-}
-
-void
-xclipcopy(void)
-{
-	clipcopy(NULL);
 }
 
 void
@@ -1684,11 +1635,21 @@ xsetpointermotion(int set)
 	XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask, &xw.attrs);
 }
 
+/* TODO combine xsetmode and xtogmode into one general function? */
 void
-xsetmode(int set, unsigned int flags)
+xsetmode(int set, uint flags)
 {
 	int mode = win.mode;
 	MODBIT(win.mode, set, flags);
+	if ((win.mode & MODE_REVERSE) != (mode & MODE_REVERSE))
+		redraw();
+}
+
+void
+xtogmode(uint flags)
+{
+	int mode = win.mode;
+	win.mode ^= flags;
 	if ((win.mode & MODE_REVERSE) != (mode & MODE_REVERSE))
 		redraw();
 }
@@ -1748,6 +1709,7 @@ focus(XEvent *ev)
 int
 match(uint mask, uint state)
 {
+	uint ignoremod = Mod2Mask|XK_SWITCH_MOD;
 	return mask == XK_ANY_MOD || mask == (state & ~ignoremod);
 }
 
@@ -1795,7 +1757,7 @@ kpress(XEvent *ev)
 		| (e->state&ControlMask ? C : 0);
 	for (k = keys; k < keys + LEN(keys); k++) {
 		if (k->sym == ksym && scmatch(state, k->set, k->clr)) {
-			len = k->fn(buf, sizeof buf, ksym, state, k->arg);
+			len = k->enc(buf, sizeof buf, ksym, state, k->arg);
 			ttywrite(buf, len, 1);
 			return;
 		}
