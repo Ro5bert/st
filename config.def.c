@@ -54,7 +54,7 @@ uint tripleclicktimeout = 600;
 
 int allowaltscreen = 1;
 
-/* allow certain non-interactive (insecure) window operations such as:
+/* allow certain non-interactive (insecure) window operations, such as
    setting the clipboard text */
 int allowwindowops = 0;
 
@@ -73,7 +73,7 @@ uint blinktimeout = 800;
 uint cursorthickness = 2;
 
 /* bell volume. It must be a value between -100 and 100.
- * Use 0 to disabling it. */
+ * Use 0 to disable it. */
 int bellvolume = 0;
 
 char *termname = "st-256color";
@@ -114,12 +114,11 @@ const char *colorname[] = {
 	/* more colors can be added after 255 to use with DefaultXX */
 	"#cccccc",
 	"#555555",
+	0,
 };
 
-/*
- * Default colors (colorname index)
- * foreground, background, cursor, reverse cursor
- */
+/* Default colors (colorname index)
+ * foreground, background, cursor, reverse cursor */
 uint defaultfg = 7;
 uint defaultbg = 0;
 uint defaultcs = 256;
@@ -144,11 +143,6 @@ uint mousebg = 0;
  * doesn't match the ones requested. */
 uint defaultattr = 11;
 
-/* Force mouse select/shortcuts while mask is active (when MODE_MOUSE is set).
- * Note that if you want to use ShiftMask with selmasks, set this to an other
- * modifier, set to 0 to not use it. */
-uint forcemousemod = ShiftMask; // TODO
-
 #define R RELS
 #define S SHFT
 #define C CTRL
@@ -167,6 +161,7 @@ Btn btns[] = {
 	{ Button4,  0,           R,  SENDSTR("\031")      },
 	{ Button5,  S,  KEXCL(S)|R,  SENDSTR("\033[6;2~") },
 	{ Button5,  0,           R,  SENDSTR("\005")      },
+	{ 0 },
 };
 
 /* TODO: add RELS to clr */
@@ -299,19 +294,28 @@ Key keys[] = {
 	{ XK_F19,  0,  0,  SENDTILDE(33) },
 	{ XK_F20,  0,  0,  SENDTILDE(34) },
 	/* libtermkey only recognizes up to F20. */
+
+	{ 0 },
 };
 
-/*
- * Selection types' masks.
- * Use the same masks as usual.
- * Button1Mask is always unset, to make masks match between ButtonPress.
- * ButtonRelease and MotionNotify.
- * If no match is found, regular selection is used.
- */
-// TODO: fix
-uint selmasks[] = {
-	[SEL_RECTANGULAR] = Mod1Mask,
+SelType seltypes[] = {
+	{ SEL_RECTANGULAR, A, KEXCL(A) },
+	/* If no match is found, regular selection is used. */
+	{ 0 },
 };
+
+uint
+confstate(uint xstate, int rels)
+{
+	uint winmode;
+
+	winmode = xgetmode();
+	return (winmode&MODE_APPCURSOR ? CURS : 0)
+		| (winmode&MODE_APPKEYPAD ? KPAD : 0)
+		| (winmode&MODE_NUMLOCK ? NMLK : 0)
+		| (rels ? RELS : 0)
+		| (xstate << MODOFFS);
+}
 
 void
 clipcopy(uint state, Arg arg)

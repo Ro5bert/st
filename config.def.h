@@ -6,7 +6,7 @@
 #define NMLK (1<<2) /* Num lock */
 #define RELS (1<<3) /* Key/buttom release */
 /* To allow checking more boolean properties when matching key/button events,
- * define them here and modify MODOFFS and TODO. */
+ * define them here and modify MODOFFS and confstate. */
 #define MODOFFS 4
 #define SHFT (ShiftMask<<MODOFFS)
 #define CTRL (ControlMask<<MODOFFS)
@@ -60,6 +60,11 @@ typedef struct {
 	Arg arg;
 } Key;
 
+typedef struct {
+	int type;
+	uint set, clr;
+} SelType;
+
 extern char *font;
 extern int borderpx;
 extern float cwscale;
@@ -93,8 +98,9 @@ extern uint mouseshape;
 extern uint mousefg;
 extern uint mousebg;
 extern uint defaultattr;
-extern uint forcemousemod;
 extern uint ignoremod;
 extern Btn btns[];
 extern Key keys[];
-extern uint selmasks[];
+extern SelType seltypes[];
+
+uint confstate(uint, int);

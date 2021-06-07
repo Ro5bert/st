@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
+#include <X11/Xlib.h>
 
 #include "util.h"
 #include "config.h"

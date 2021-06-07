@@ -44,7 +44,7 @@ typedef struct {
 	int w, h; /* window width and height */
 	int ch; /* char height */
 	int cw; /* char width  */
-	int mode; /* window state/mode flags */
+	uint mode; /* window state/mode flags */
 	int cursor; /* cursor style */
 } TermWindow;
 
@@ -132,7 +132,6 @@ static void kpress(XEvent *);
 static void cmessage(XEvent *);
 static void resize(XEvent *);
 static void focus(XEvent *);
-static uint buttonmask(uint);
 static int mouseaction(XEvent *, uint);
 static void brelease(XEvent *);
 static void bpress(XEvent *);
@@ -294,16 +293,20 @@ evrow(XEvent *e)
 void
 mousesel(XEvent *e, int done)
 {
-	int type, seltype = SEL_REGULAR;
-	uint state = e->xbutton.state & ~(Button1Mask | forcemousemod);
+	int type;
+	uint state;
+	SelType *st;
 
-	for (type = 1; type < LEN(selmasks); ++type) {
-		if (match(selmasks[type], state)) {
-			seltype = type;
+	type = SEL_REGULAR;
+	state = confstate(e->xbutton.state, 0);
+	for (st = seltypes; st->type; st++) {
+		if (MATCH(state, st->set, st->clr)) {
+			type = st->type;
 			break;
 		}
 	}
-	selextend(evcol(e), evrow(e), seltype, done);
+
+	selextend(evcol(e), evrow(e), type, done);
 	if (done)
 		setsel(getsel(), e->xbutton.time);
 }
@@ -373,31 +376,16 @@ mousereport(XEvent *e)
 	ttywrite(buf, len, 0);
 }
 
-uint
-buttonmask(uint button)
-{
-	return button == Button1 ? Button1Mask
-	     : button == Button2 ? Button2Mask
-	     : button == Button3 ? Button3Mask
-	     : button == Button4 ? Button4Mask
-	     : button == Button5 ? Button5Mask
-	     : 0;
-}
-
 int
 mouseaction(XEvent *e, uint release)
 {
-	MouseShortcut *ms;
+	uint state;
+	Btn *b;
 
-	/* ignore Button<N>mask for Button<N> - it's set on release */
-	uint state = e->xbutton.state & ~buttonmask(e->xbutton.button);
-
-	for (ms = mshortcuts; ms < mshortcuts + LEN(mshortcuts); ms++) {
-		if (ms->release == release &&
-		    ms->button == e->xbutton.button &&
-		    (match(ms->mod, state) ||  /* exact or forced */
-		     match(ms->mod, state & ~forcemousemod))) {
-			ms->func(&(ms->arg));
+	state = confstate(e->xbutton.state, release);
+	for (b = btns; b->btn; b++) {
+		if (b->btn == e->xbutton.button && MATCH(state, b->set, b->clr)) {
+			b->fn(state, b->arg);
 			return 1;
 		}
 	}
@@ -411,7 +399,7 @@ bpress(XEvent *e)
 	struct timespec now;
 	int snap;
 
-	if (IS_SET(MODE_MOUSE) && !(e->xbutton.state & forcemousemod)) {
+	if (IS_SET(MODE_MOUSE)) {
 		mousereport(e);
 		return;
 	}
@@ -627,7 +615,7 @@ xsetsel(char *str)
 void
 brelease(XEvent *e)
 {
-	if (IS_SET(MODE_MOUSE) && !(e->xbutton.state & forcemousemod)) {
+	if (IS_SET(MODE_MOUSE)) {
 		mousereport(e);
 		return;
 	}
@@ -641,7 +629,7 @@ brelease(XEvent *e)
 void
 bmotion(XEvent *e)
 {
-	if (IS_SET(MODE_MOUSE) && !(e->xbutton.state & forcemousemod)) {
+	if (IS_SET(MODE_MOUSE)) {
 		mousereport(e);
 		return;
 	}
@@ -721,12 +709,15 @@ xloadcols(void)
 	int i;
 	static int loaded;
 	Color *cp;
+	const char **c;
 
 	if (loaded) {
 		for (cp = dc.col; cp < &dc.col[dc.collen]; ++cp)
 			XftColorFree(xw.dpy, xw.vis, xw.cmap, cp);
 	} else {
-		dc.collen = MAX(LEN(colorname), 256);
+		dc.collen = 256;
+		for (c = &colorname[256]; *c; c++)
+			dc.collen++;
 		dc.col = xmalloc(dc.collen * sizeof(Color));
 	}
 
@@ -1635,23 +1626,20 @@ xsetpointermotion(int set)
 	XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask, &xw.attrs);
 }
 
-/* TODO combine xsetmode and xtogmode into one general function? */
-void
-xsetmode(int set, uint flags)
+/* Modify the window mode and return the new mode.
+ * set clr
+ *  0   0   unchanged
+ *  0   1   clear
+ *  1   0   set
+ *  1   1   toggle */
+uint
+xmode(uint set, uint clr)
 {
-	int mode = win.mode;
-	MODBIT(win.mode, set, flags);
-	if ((win.mode & MODE_REVERSE) != (mode & MODE_REVERSE))
+	int orig = win.mode;
+	win.mode = (~win.mode & set) | (win.mode & ~clr);
+	if ((win.mode & MODE_REVERSE) != (orig & MODE_REVERSE))
 		redraw();
-}
-
-void
-xtogmode(uint flags)
-{
-	int mode = win.mode;
-	win.mode ^= flags;
-	if ((win.mode & MODE_REVERSE) != (mode & MODE_REVERSE))
-		redraw();
+	return win.mode;
 }
 
 int
@@ -1706,19 +1694,6 @@ focus(XEvent *ev)
 	}
 }
 
-int
-match(uint mask, uint state)
-{
-	uint ignoremod = Mod2Mask|XK_SWITCH_MOD;
-	return mask == XK_ANY_MOD || mask == (state & ~ignoremod);
-}
-
-int
-scmatch(uint state, uint set, uint clr)
-{
-	return ((set & ~state) | (clr & state)) == 0;
-}
-
 void
 kpress(XEvent *ev)
 {
@@ -1728,7 +1703,6 @@ kpress(XEvent *ev)
 	int len;
 	Rune c;
 	Status status;
-	Shortcut *bp;
 	Key *k;
 	uint state;
 
@@ -1740,63 +1714,48 @@ kpress(XEvent *ev)
 	else
 		len = XLookupString(e, buf, sizeof buf, &ksym, NULL);
 
-	/* 1. shortcuts */
-	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
-		if (ksym == bp->keysym && match(bp->mod, e->state)) {
-			bp->func(&(bp->arg));
+	/* TODO: pull all this out into keyaction for symmetry with mouseaction */
+
+	state = confstate(e->state, 0);
+
+	/* 1. custom handling from config */
+	for (k = keys; k->sym; k++) {
+		if (k->sym == ksym && MATCH(state, k->set, k->clr)) {
+			k->fn(state, k->arg);
 			return;
 		}
 	}
 
-	/* 2. custom keys from config.h */
-	state = (IS_SET(MODE_APPCURSOR) ? CURS : 0)
-		| (IS_SET(MODE_APPKEYPAD) ? KPAD : 0)
-		| (IS_SET(MODE_NUMLOCK) ? NMLK : 0)
-		| (e->state&ShiftMask ? S : 0)
-		| (e->state&Mod1Mask ? A : 0)
-		| (e->state&ControlMask ? C : 0);
-	for (k = keys; k < keys + LEN(keys); k++) {
-		if (k->sym == ksym && scmatch(state, k->set, k->clr)) {
-			len = k->enc(buf, sizeof buf, ksym, state, k->arg);
-			ttywrite(buf, len, 1);
-			return;
-		}
-	}
-
-	/* 3. latin 1 */
+	/* 2. latin 1 */
 	if (0x20 <= ksym && ksym < 0x7f) {
 		buf[0] = ksym;
 		len = 1;
-		if ((state&C) > 0) {
+		if ((state&CTRL) > 0) {
 			if ('a' <= ksym && ksym <= 'z') {
 				buf[0] -= 0x60;
 			} else {
-				len = kcsi(buf, sizeof buf, state, ksym, S, 'u');
-				ttywrite(buf, len, 1);
-				return;
+				len = csienc(buf, sizeof buf, state, ksym, SHFT, 'u');
+				goto write;
 			}
 		}
-		if ((state&A) > 0) {
+		if ((state&ALT) > 0) {
 			buf[1] = buf[0];
 			buf[0] = '\033';
 			len = 2;
 		}
-		ttywrite(buf, len, 1);
-		return;
+		goto write;
 	}
 
 	if (len == 0)
 		return;
 
-	/* 4. modified UTF8-encoded unicode */
-	if ((state&ALLM) > 0 && utf8decode(buf, &c, len) == len
-			&& c != UTF_INVALID) {
-		len = kcsi(buf, sizeof buf, state, c, S, 'u');
-		ttywrite(buf, len, 1);
-		return;
-	}
+	/* 3. modified UTF8-encoded unicode */
+	if ((state&KMOD) > 0 && utf8decode(buf, &c, len) == len
+			&& c != UTF_INVALID)
+		len = csienc(buf, sizeof buf, state, c, SHFT, 'u');
 
-	/* 5. composed string from input method */
+	/* 4. directly send composed string from input method */
+write:
 	ttywrite(buf, len, 1);
 }
 

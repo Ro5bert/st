@@ -17,6 +17,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <wchar.h>
+#include <X11/Xlib.h> /* TODO gross? */
 
 #include "util.h"
 #include "config.h"

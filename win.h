@@ -1,6 +1,10 @@
 /* See LICENSE for license details. */
 /* Requires: util.h, st.h */
 
+#define xgetmode() xmode(0,0)
+#define xsetmode(set,flags) ((set) ? xmode((flags),0) : xmode(0,(flags)))
+#define xtogmode(flags) xmode((flags),(flags))
+
 enum win_mode {
 	MODE_VISIBLE     = 1 << 0,
 	MODE_FOCUSED     = 1 << 1,
@@ -40,8 +44,7 @@ int xsetcolorname(int, const char *);
 void xseticontitle(char *);
 void xsettitle(char *);
 int xsetcursor(int);
-void xsetmode(int, uint);
-void xtogmode(uint);
+uint xmode(uint, uint);
 void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);
