@@ -1,10 +1,10 @@
 # st - simple terminal
-# See LICENSE file for copyright and license details.
+# See LICENSE file for license details.
 .POSIX:
 
 include config.mk
 
-SRC = st.c x.c
+SRC = st.c x.c config.c
 OBJ = $(SRC:.c=.o)
 
 all: options st
@@ -15,16 +15,19 @@ options:
 	@echo "LDFLAGS = $(STLDFLAGS)"
 	@echo "CC      = $(CC)"
 
+config.c:
+	cp config.def.c config.c
 config.h:
 	cp config.def.h config.h
 
 .c.o:
 	$(CC) $(STCFLAGS) -c $<
 
-st.o: config.h st.h win.h
-x.o: arg.h config.h st.h win.h
+st.o: util.h config.h st.h win.h
+x.o: arg.h util.h config.h st.h win.h
+config.o: util.h config.h st.h win.h
 
-$(OBJ): config.h config.mk
+$(OBJ): config.mk
 
 st: $(OBJ)
 	$(CC) -o $@ $(OBJ) $(STLDFLAGS)
@@ -32,6 +35,7 @@ st: $(OBJ)
 clean:
 	rm -f st $(OBJ) st-$(VERSION).tar.gz
 
+# TODO
 dist: clean
 	mkdir -p st-$(VERSION)
 	cp -R FAQ LEGACY TODO LICENSE Makefile README config.mk\
