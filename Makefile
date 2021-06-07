@@ -4,7 +4,7 @@
 
 include config.mk
 
-SRC = st.c x.c config.c
+SRC = st.c x.c config.c util.c
 OBJ = $(SRC:.c=.o)
 
 all: options st
@@ -26,6 +26,7 @@ config.h:
 st.o: util.h config.h st.h win.h
 x.o: arg.h util.h config.h st.h win.h
 config.o: util.h config.h st.h win.h
+util.o: util.h config.h
 
 $(OBJ): config.mk
 
