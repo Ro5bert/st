@@ -128,11 +128,13 @@ static int evrow(XEvent *);
 static void expose(XEvent *);
 static void visibility(XEvent *);
 static void unmap(XEvent *);
+static int handlesym(KeySym, uint);
+static void kaction(XKeyEvent *, int);
 static void kpress(XEvent *);
 static void cmessage(XEvent *);
 static void resize(XEvent *);
 static void focus(XEvent *);
-static int mouseaction(XEvent *, uint);
+static int baction(XButtonEvent *, int);
 static void brelease(XEvent *);
 static void bpress(XEvent *);
 static void bmotion(XEvent *);
@@ -377,14 +379,14 @@ mousereport(XEvent *e)
 }
 
 int
-mouseaction(XEvent *e, uint release)
+baction(XButtonEvent *e, int release)
 {
 	uint state;
 	Btn *b;
 
-	state = confstate(e->xbutton.state, release);
+	state = confstate(e->state, release);
 	for (b = btns; b->btn; b++) {
-		if (b->btn == e->xbutton.button && MATCH(state, b->set, b->clr)) {
+		if (b->btn == e->button && MATCH(state, b->set, b->clr)) {
 			b->fn(state, b->arg);
 			return 1;
 		}
@@ -404,7 +406,7 @@ bpress(XEvent *e)
 		return;
 	}
 
-	if (mouseaction(e, 0))
+	if (baction(&e->xbutton, 0))
 		return;
 
 	if (e->xbutton.button == Button1) {
@@ -620,7 +622,7 @@ brelease(XEvent *e)
 		return;
 	}
 
-	if (mouseaction(e, 1))
+	if (baction(&e->xbutton, 1))
 		return;
 	if (e->xbutton.button == Button1)
 		mousesel(e, 1);
@@ -1694,69 +1696,76 @@ focus(XEvent *ev)
 	}
 }
 
-void
-kpress(XEvent *ev)
+int
+handlesym(KeySym sym, uint state)
 {
-	XKeyEvent *e = &ev->xkey;
-	KeySym ksym;
-	char buf[64];
-	int len;
-	Rune c;
-	Status status;
 	Key *k;
-	uint state;
+	char buf[2];
+	size_t len;
 
-	if (IS_SET(MODE_KBDLOCK))
-		return;
-
-	if (xw.ime.xic)
-		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &ksym, &status);
-	else
-		len = XLookupString(e, buf, sizeof buf, &ksym, NULL);
-
-	/* TODO: pull all this out into keyaction for symmetry with mouseaction */
-
-	state = confstate(e->state, 0);
-
-	/* 1. custom handling from config */
+	/* Custom handling from config */
 	for (k = keys; k->sym; k++) {
-		if (k->sym == ksym && MATCH(state, k->set, k->clr)) {
+		if (k->sym == sym && MATCH(state, k->set, k->clr)) {
 			k->fn(state, k->arg);
-			return;
+			return 1;
 		}
 	}
 
-	/* 2. latin 1 */
-	if (0x20 <= ksym && ksym < 0x7f) {
-		buf[0] = ksym;
+	/* Latin 1 */
+	if (0x20 <= sym && sym < 0x7f) {
+		buf[0] = sym;
 		len = 1;
-		if ((state&CTRL) > 0) {
-			if ('a' <= ksym && ksym <= 'z') {
-				buf[0] -= 0x60;
-			} else {
-				len = csienc(buf, sizeof buf, state, ksym, SHFT, 'u');
-				goto write;
-			}
-		}
-		if ((state&ALT) > 0) {
+		if ((state&CTRL) > 0 && 'a' <= sym && sym <= 'z')
+			buf[0] -= 0x60;
+		if ((state&CTRL) > 0 && !('a' <= sym && sym <= 'z')) {
+			len = csienc(buf, sizeof buf, state, sym, SHFT, 'u');
+		} else if ((state&ALT) > 0) {
 			buf[1] = buf[0];
 			buf[0] = '\033';
 			len = 2;
 		}
-		goto write;
+		ttywrite(buf, len, 1);
+		return 1;
 	}
+
+	return 0;
+}
+
+void
+kaction(XKeyEvent *e, int release)
+{
+	uint state;
+	char buf[64];
+	size_t len;
+	KeySym sym;
+	Status status;
+	Rune c;
+
+	sym = 0;
+	state = confstate(e->state, release);
+	if (xw.ime.xic)
+		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &sym, &status);
+	else
+		len = XLookupString(e, buf, sizeof buf, &sym, NULL);
+
+	if (sym != 0 && handlesym(sym, state))
+		return;
 
 	if (len == 0)
 		return;
-
-	/* 3. modified UTF8-encoded unicode */
 	if ((state&KMOD) > 0 && utf8decode(buf, &c, len) == len
-			&& c != UTF_INVALID)
+			&& c != UTF_INVALID) /* Modified UTF8-encoded unicode? */
 		len = csienc(buf, sizeof buf, state, c, SHFT, 'u');
-
-	/* 4. directly send composed string from input method */
-write:
+	/* Default to directly sending composed string from the input method. */
 	ttywrite(buf, len, 1);
+}
+
+void
+kpress(XEvent *e)
+{
+	if (IS_SET(MODE_KBDLOCK))
+		return;
+	kaction(&e->xkey, 0);
 }
 
 void
