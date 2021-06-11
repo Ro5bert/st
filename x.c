@@ -1741,14 +1741,14 @@ kaction(XKeyEvent *e, int release)
 	Status status;
 	Rune c;
 
-	sym = 0;
+	sym = NoSymbol;
 	state = confstate(e->state, release);
 	if (xw.ime.xic)
 		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &sym, &status);
 	else
 		len = XLookupString(e, buf, sizeof buf, &sym, NULL);
 
-	if (sym != 0 && handlesym(sym, state))
+	if (sym != NoSymbol && handlesym(sym, state))
 		return;
 
 	if (len == 0)
