@@ -12,8 +12,8 @@
 #include "util.h"
 #include "config.h"
 
-static Rune utf8decodebyte(char, size_t *);
-static char utf8encodebyte(Rune, size_t);
+static Rune utf8decbyte(char, size_t *);
+static char utf8encbyte(Rune, size_t);
 static size_t utf8validate(Rune *, size_t);
 static char base64dec_getc(const char **);
 static uint termkeymod(uint xmod);
@@ -102,7 +102,7 @@ xwrite(int fd, const char *s, size_t len)
 }
 
 size_t
-utf8decode(const char *c, Rune *u, size_t clen)
+utf8dec(const char *c, Rune *u, size_t clen)
 {
 	size_t i, j, len, type;
 	Rune udecoded;
@@ -110,11 +110,11 @@ utf8decode(const char *c, Rune *u, size_t clen)
 	*u = UTF_INVALID;
 	if (!clen)
 		return 0;
-	udecoded = utf8decodebyte(c[0], &len);
+	udecoded = utf8decbyte(c[0], &len);
 	if (!BETWEEN(len, 1, UTF_SIZ))
 		return 1;
 	for (i = 1, j = 1; i < clen && j < len; ++i, ++j) {
-		udecoded = (udecoded << 6) | utf8decodebyte(c[i], &type);
+		udecoded = (udecoded << 6) | utf8decbyte(c[i], &type);
 		if (type != 0)
 			return j;
 	}
@@ -127,7 +127,7 @@ utf8decode(const char *c, Rune *u, size_t clen)
 }
 
 Rune
-utf8decodebyte(char c, size_t *i)
+utf8decbyte(char c, size_t *i)
 {
 	for (*i = 0; *i < LEN(utfmask); ++(*i))
 		if (((uchar)c & utfmask[*i]) == utfbyte[*i])
@@ -137,7 +137,7 @@ utf8decodebyte(char c, size_t *i)
 }
 
 size_t
-utf8encode(Rune u, char *c)
+utf8enc(Rune u, char *c)
 {
 	size_t len, i;
 
@@ -146,16 +146,16 @@ utf8encode(Rune u, char *c)
 		return 0;
 
 	for (i = len - 1; i != 0; --i) {
-		c[i] = utf8encodebyte(u, 0);
+		c[i] = utf8encbyte(u, 0);
 		u >>= 6;
 	}
-	c[0] = utf8encodebyte(u, len);
+	c[0] = utf8encbyte(u, len);
 
 	return len;
 }
 
 char
-utf8encodebyte(Rune u, size_t i)
+utf8encbyte(Rune u, size_t i)
 {
 	return utfbyte[i] | (u & ~utfmask[i]);
 }

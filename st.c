@@ -436,7 +436,7 @@ getsel(void)
 			if (gp->mode & ATTR_WDUMMY)
 				continue;
 
-			ptr += utf8encode(gp->u, ptr);
+			ptr += utf8enc(gp->u, ptr);
 		}
 
 		/*
@@ -1008,7 +1008,7 @@ tsetchar(Rune u, const Glyph *attr, int x, int y)
 	 */
 	if (term.trantbl[term.charset] == CS_GRAPHIC0 &&
 	   BETWEEN(u, 0x41, 0x7e) && vt100_0[u - 0x41])
-		utf8decode(vt100_0[u - 0x41], &u, UTF_SIZ);
+		utf8dec(vt100_0[u - 0x41], &u, UTF_SIZ);
 
 	if (term.line[y][x].mode & ATTR_WIDE) {
 		if (x+1 < term.col) {
@@ -1818,7 +1818,7 @@ tdumpline(int n)
 	end = &bp[MIN(tlinelen(n), term.col) - 1];
 	if (bp != end || bp->u != ' ') {
 		for ( ; bp <= end; ++bp)
-			tprinter(buf, utf8encode(bp->u, buf));
+			tprinter(buf, utf8enc(bp->u, buf));
 	}
 	tprinter("\n", 1);
 }
@@ -2104,7 +2104,7 @@ tputc(Rune u)
 		c[0] = u;
 		width = len = 1;
 	} else {
-		len = utf8encode(u, c);
+		len = utf8enc(u, c);
 		if (!control && (width = wcwidth(u)) == -1)
 			width = 1;
 	}
@@ -2239,7 +2239,7 @@ twrite(const char *buf, int buflen, int show_ctrl)
 	for (n = 0; n < buflen; n += charsize) {
 		if (IS_SET(MODE_UTF8)) {
 			/* process a complete utf8 char */
-			charsize = utf8decode(buf + n, &u, buflen - n);
+			charsize = utf8dec(buf + n, &u, buflen - n);
 			if (charsize == 0)
 				break;
 		} else {

@@ -1753,7 +1753,7 @@ kaction(XKeyEvent *e, int release)
 
 	if (len == 0)
 		return;
-	if ((state&KMOD) > 0 && utf8decode(buf, &c, len) == len
+	if ((state&KMOD) > 0 && utf8dec(buf, &c, len) == len
 			&& c != UTF_INVALID) /* Modified UTF8-encoded unicode? */
 		len = csienc(buf, sizeof buf, state, c, SHFT, 'u');
 	/* Default to directly sending composed string from the input method. */

@@ -28,8 +28,7 @@ void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
 char *xstrdup(const char *);
 ssize_t xwrite(int, const char *, size_t);
-/* TODO: utf8 spells out decode, but base64 doesn't... */
-size_t utf8decode(const char *, Rune *, size_t);
-size_t utf8encode(Rune, char *);
+size_t utf8dec(const char *, Rune *, size_t);
+size_t utf8enc(Rune, char *);
 char *base64dec(const char *);
 size_t csienc(char *, size_t, uint, uint, uint, char);
