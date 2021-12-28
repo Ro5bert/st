@@ -1713,7 +1713,8 @@ handlesym(KeySym sym, uint state)
 
 	/* 2. Printable ASCII (some special cases are handled in the keys table) */
 	if (0x20 <= sym && sym < 0x7f) {
-		/* CTRL + [ALT +] non-lowercase-letter must be encoded as CSI */
+		/* CTRL + [ALT +] non-lowercase-letter must be encoded as CSI
+		 * XXX some of these should probably be mapped to C0 controls */
 		if ((state&CTRL) > 0 && !('a' <= sym && sym <= 'z')) {
 			len = csienc(buf, sizeof buf, state, sym, SHFT, 'u');
 		} else {

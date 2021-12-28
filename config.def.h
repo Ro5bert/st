@@ -30,7 +30,7 @@ typedef union {
 	} str;
 	struct {
 		uint n; /* First parameter; ignored if 0 or 1 */
-		uint m; /* State mask */
+		uint m; /* State bits to ignore when encoding as CSI */
 		char c;
 	} csi;
 } Arg;

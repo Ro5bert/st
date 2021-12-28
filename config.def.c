@@ -167,28 +167,27 @@ Btn btns[] = {
 /* TODO: add RELS to clr */
 Key keys[] = {
 	/* Shortcuts (must be first to get precedence) */
-	{ XK_Home,      TERMMOD,  KEXCL(TERMMOD),      zoomrst,  ARG_DUMMY },
-	{ XK_Prior,     TERMMOD,  KEXCL(TERMMOD),      zoomrel,  {.d = +1} },
-	{ XK_Next,      TERMMOD,  KEXCL(TERMMOD),      zoomrel,  {.d = -1} },
-	{ XK_Print,           C,        KEXCL(C),   togprinter,  ARG_DUMMY },
-	{ XK_Print,           S,        KEXCL(S),  printscreen,  ARG_DUMMY },
-	{ XK_Print,           0,               0,     selprint,  ARG_DUMMY },
-	{ XK_Insert,          S,        KEXCL(S),     selpaste,  ARG_DUMMY },
-	{ XK_Break,           0,               0,    sendbreak,  ARG_DUMMY },
-	{ XK_Num_Lock,  TERMMOD,  KEXCL(TERMMOD),      numlock,  ARG_DUMMY },
-	{ XK_C,         TERMMOD,  KEXCL(TERMMOD),     clipcopy,  ARG_DUMMY },
-	{ XK_V,         TERMMOD,  KEXCL(TERMMOD),    clippaste,  ARG_DUMMY },
-	{ XK_Y,         TERMMOD,  KEXCL(TERMMOD),     selpaste,  ARG_DUMMY },
+	{ XK_Home,      TERMMOD,  KEXCL(TERMMOD),       zoomrst,  ARG_DUMMY },
+	{ XK_Prior,     TERMMOD,  KEXCL(TERMMOD),       zoomrel,  {.d = +1} },
+	{ XK_Next,      TERMMOD,  KEXCL(TERMMOD),       zoomrel,  {.d = -1} },
+	{ XK_Print,           C,        KEXCL(C),    togprinter,  ARG_DUMMY },
+	{ XK_Print,           S,        KEXCL(S),   printscreen,  ARG_DUMMY },
+	{ XK_Print,           0,               0,      selprint,  ARG_DUMMY },
+	{ XK_Insert,          S,        KEXCL(S),      selpaste,  ARG_DUMMY },
+	{ XK_Break,           0,               0,     sendbreak,  ARG_DUMMY },
+	{ XK_Num_Lock,  TERMMOD,  KEXCL(TERMMOD),       numlock,  ARG_DUMMY },
+	{ XK_C,         TERMMOD,  KEXCL(TERMMOD),      clipcopy,  ARG_DUMMY },
+	{ XK_V,         TERMMOD,  KEXCL(TERMMOD),     clippaste,  ARG_DUMMY },
+	{ XK_Y,         TERMMOD,  KEXCL(TERMMOD),      selpaste,  ARG_DUMMY },
 
-	/* Latin1 special cases (kpress handles most cases already) */
-	{ XK_space,          C,    KEXCL(C),  SENDSTR("\0")     },
-	{ XK_space,        C|A,  KEXCL(C|A),  SENDSTR("\033\0") },
-	{ XK_at,             C,           0,  SENDUNICODE('@')  }, /* '@'-64 is NUL */
-	{ XK_O,              A,           0,  SENDUNICODE('O')  }, /* ESC O  is SS3 */
-	{ XK_i,              C,           0,  SENDUNICODE('i')  }, /* 'i'-64 is tab */
-	{ XK_m,              C,           0,  SENDUNICODE('m')  }, /* 'm'-64 is CR  */
-	{ XK_bracketleft,    C,           0,  SENDUNICODE('[')  }, /* '['-64 is ESC */
-	{ XK_bracketleft,    A,           0,  SENDUNICODE('[')  }, /* ESC [  is CSI */
+	/* ASCII special cases (kpress handles most cases already) */
+	{ XK_space,          S,           0,  SENDCSI(' ',0,'u') },
+	{ XK_space,          C,    KEXCL(C),  SENDSTR("\0")      },
+	{ XK_space,        C|A,  KEXCL(C|A),  SENDSTR("\033\0")  },
+	{ XK_O,              A,           0,  SENDUNICODE('O')   }, /* ESC O  is SS3 */
+	{ XK_i,              C,           0,  SENDUNICODE('i')   }, /* 'i'-0x60 is tab */
+	{ XK_m,              C,           0,  SENDUNICODE('m')   }, /* 'm'-0x60 is CR  */
+	{ XK_bracketleft,    A,           0,  SENDUNICODE('[')   }, /* ESC [  is CSI */
 
 	/* Misc */
 	{ XK_BackSpace,     0,      KMOD,  SENDSTR("\177")     },
