@@ -35,8 +35,8 @@ float chscale = 1.0;
  * 1: program passed with -e
  * 2: scroll and/or utmp
  * 3: SHELL environment variable
- * 4: value of shell in /etc/passwd
- * 5: value of shell in config.h */
+ * 4: user shell in /etc/passwd
+ * 5: shell in config.c */
 char *shell = "/bin/sh";
 char *utmp = 0;
 /* scroll program: to enable use a string like "scroll" */

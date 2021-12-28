@@ -103,4 +103,8 @@ extern Btn btns[];
 extern Key keys[];
 extern SelType seltypes[];
 
+/* confstate takes the "X state" (i.e., the raw keyboard modifier state
+ * received from X lib) and converts it into "st state" (i.e., the boolean
+ * properties used in matching events to actions in the btns, keys, and
+ * seltypes tables). */
 uint confstate(uint, int);
