@@ -1703,7 +1703,7 @@ handlesym(KeySym sym, uint state)
 	char buf[64]; /* big enough for CSI sequence */
 	size_t len;
 
-	/* Custom handling from config */
+	/* 1. Custom handling from config */
 	for (k = keys; k->sym; k++) {
 		if (k->sym == sym && MATCH(state, k->set, k->clr)) {
 			k->fn(state, k->arg);
@@ -1711,18 +1711,24 @@ handlesym(KeySym sym, uint state)
 		}
 	}
 
-	/* Latin 1 */
+	/* 2. Printable ASCII (some special cases are handled in the keys table) */
 	if (0x20 <= sym && sym < 0x7f) {
-		buf[0] = sym;
-		len = 1;
-		if ((state&CTRL) > 0 && 'a' <= sym && sym <= 'z')
-			buf[0] -= 0x60;
+		/* CTRL + [ALT +] non-lowercase-letter must be encoded as CSI */
 		if ((state&CTRL) > 0 && !('a' <= sym && sym <= 'z')) {
 			len = csienc(buf, sizeof buf, state, sym, SHFT, 'u');
-		} else if ((state&ALT) > 0) {
-			buf[1] = buf[0];
-			buf[0] = '\033';
-			len = 2;
+		} else {
+			buf[0] = sym;
+			len = 1;
+			/* CTRL + lowercase letter can usually be handled by translating to
+			 * the corresponding C0 control */
+			if ((state&CTRL) > 0)
+				buf[0] -= 0x60;
+			/* ALT can usually be handled by appending ESC */
+			if ((state&ALT) > 0) {
+				buf[1] = buf[0];
+				buf[0] = '\033';
+				len = 2;
+			}
 		}
 		ttywrite(buf, len, 1);
 		return 1;
@@ -1741,22 +1747,29 @@ kaction(XKeyEvent *e, int release)
 	Status status;
 	Rune c;
 
-	sym = NoSymbol;
 	state = confstate(e->state, release);
+
+	sym = NoSymbol;
 	if (xw.ime.xic)
 		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &sym, &status);
 	else
 		len = XLookupString(e, buf, sizeof buf, &sym, NULL);
 
+	/* 1. Sym  */
 	if (sym != NoSymbol && handlesym(sym, state))
 		return;
 
 	if (len == 0)
 		return;
+
+	/* 2. Modified UTF8-encoded unicode */
 	if ((state&KMOD) > 0 && utf8dec(buf, &c, len) == len
-			&& c != UTF_INVALID) /* Modified UTF8-encoded unicode? */
+			&& c != UTF_INVALID)
 		len = csienc(buf, sizeof buf, state, c, SHFT, 'u');
-	/* Default to directly sending composed string from the input method. */
+
+	/* 3. Default to directly sending composed string from the input method
+	 * (might not be UTF8; encoding is dependent on locale of input method) */
+
 	ttywrite(buf, len, 1);
 }
 
