@@ -25,7 +25,7 @@ static void sendbreak(uint, Arg);
 static void togprinter(uint, Arg);
 
 /* See: http://freedesktop.org/software/fontconfig/fontconfig-user.html */
-char *font = "Fira Mono:pixelsize=18:antialias=true:autohint=true";
+char *font = "Fira Mono:pixelsize=32:antialias=true:autohint=true";
 int borderpx = 2;
 /* Kerning / character bounding-box multipliers */
 float cwscale = 1.0;
@@ -111,7 +111,9 @@ const char *colorname[] = {
 
 	[255] = 0,
 
-	/* more colors can be added after 255 to use with DefaultXX */
+	/* more colors can be added after 255 to use with defaultXX */
+	"#f8f8f2",
+	"#1c1c1c",
 	"#cccccc",
 	"#555555",
 	0,
@@ -119,10 +121,10 @@ const char *colorname[] = {
 
 /* Default colors (colorname index)
  * foreground, background, cursor, reverse cursor */
-uint defaultfg = 7;
-uint defaultbg = 0;
-uint defaultcs = 256;
-uint defaultrcs = 257;
+uint defaultfg = 256;
+uint defaultbg = 257;
+uint defaultcs = 258;
+uint defaultrcs = 259;
 
 /* Default shape of cursor
  * 2: Block ("█")
