@@ -1700,7 +1700,7 @@ int
 handlesym(KeySym sym, uint state)
 {
 	Key *k;
-	char buf[2];
+	char buf[64]; /* big enough for CSI sequence */
 	size_t len;
 
 	/* Custom handling from config */
