@@ -131,6 +131,7 @@ static void unmap(XEvent *);
 static int handlesym(KeySym, uint);
 static void kaction(XKeyEvent *, int);
 static void kpress(XEvent *);
+static void krelease(XEvent *);
 static void cmessage(XEvent *);
 static void resize(XEvent *);
 static void focus(XEvent *);
@@ -151,6 +152,7 @@ static void usage(void);
 
 static void (*handler[LASTEvent])(XEvent *) = {
 	[KeyPress] = kpress,
+	[KeyRelease] = krelease,
 	[ClientMessage] = cmessage,
 	[ConfigureNotify] = resize,
 	[VisibilityNotify] = visibility,
@@ -410,10 +412,8 @@ bpress(XEvent *e)
 		return;
 
 	if (e->xbutton.button == Button1) {
-		/*
-		 * If the user clicks below predefined timeouts specific
-		 * snapping behaviour is exposed.
-		 */
+		/* If the user clicks below predefined timeouts specific
+		 * snapping behaviour is exposed. */
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		if (TIMEDIFF(now, xsel.tclick2) <= tripleclicktimeout) {
 			snap = SNAP_LINE;
@@ -427,6 +427,20 @@ bpress(XEvent *e)
 
 		selstart(evcol(e), evrow(e), snap);
 	}
+}
+
+void
+brelease(XEvent *e)
+{
+	if (IS_SET(MODE_MOUSE)) {
+		mousereport(e);
+		return;
+	}
+
+	if (baction(&e->xbutton, 1))
+		return;
+	if (e->xbutton.button == Button1)
+		mousesel(e, 1);
 }
 
 void
@@ -612,20 +626,6 @@ void
 xsetsel(char *str)
 {
 	setsel(str, CurrentTime);
-}
-
-void
-brelease(XEvent *e)
-{
-	if (IS_SET(MODE_MOUSE)) {
-		mousereport(e);
-		return;
-	}
-
-	if (baction(&e->xbutton, 1))
-		return;
-	if (e->xbutton.button == Button1)
-		mousesel(e, 1);
 }
 
 void
@@ -1780,6 +1780,14 @@ kpress(XEvent *e)
 	if (IS_SET(MODE_KBDLOCK))
 		return;
 	kaction(&e->xkey, 0);
+}
+
+void
+krelease(XEvent *e)
+{
+	if (IS_SET(MODE_KBDLOCK))
+		return;
+	kaction(&e->xkey, 1);
 }
 
 void
