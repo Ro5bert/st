@@ -97,13 +97,11 @@ typedef struct {
 	int mode;
 	int type;
 	int snap;
-	/*
-	 * Selection variables:
+	/* Selection variables:
 	 * nb – normalized coordinates of the beginning of the selection
 	 * ne – normalized coordinates of the end of the selection
 	 * ob – original coordinates of the beginning of the selection
-	 * oe – original coordinates of the end of the selection
-	 */
+	 * oe – original coordinates of the end of the selection */
 	struct {
 		int x, y;
 	} nb, ne, ob, oe;
@@ -278,7 +276,8 @@ selextend(int col, int row, int type, int done)
 	selnormalize();
 	sel.type = type;
 
-	if (oldey != sel.oe.y || oldex != sel.oe.x || oldtype != sel.type || sel.mode == SEL_EMPTY)
+	if (oldey != sel.oe.y || oldex != sel.oe.x || oldtype != sel.type
+			|| sel.mode == SEL_EMPTY)
 		tsetdirt(MIN(sel.nb.y, oldsby), MAX(sel.ne.y, oldsey));
 
 	sel.mode = done ? SEL_IDLE : SEL_READY;
@@ -337,10 +336,8 @@ selsnap(int *x, int *y, int direction)
 
 	switch (sel.snap) {
 	case SNAP_WORD:
-		/*
-		 * Snap around if the word wraps around at the end or
-		 * beginning of a line.
-		 */
+		/* Snap around if the word wraps around at the end or
+		 * beginning of a line. */
 		prevgp = &term.line[*y][*x];
 		prevdelim = ISDELIM(prevgp->u);
 		for (;;) {
@@ -376,11 +373,9 @@ selsnap(int *x, int *y, int direction)
 		}
 		break;
 	case SNAP_LINE:
-		/*
-		 * Snap around if the the previous line or the current one
+		/* Snap around if the the previous line or the current one
 		 * has set ATTR_WRAP at its end. Then the whole next or
-		 * previous line will be selected.
-		 */
+		 * previous line will be selected. */
 		*x = (direction < 0) ? 0 : term.col - 1;
 		if (direction < 0) {
 			for (; *y > 0; *y += direction) {
@@ -439,15 +434,13 @@ getsel(void)
 			ptr += utf8enc(gp->u, ptr);
 		}
 
-		/*
-		 * Copy and pasting of line endings is inconsistent
+		/* Copy and pasting of line endings is inconsistent
 		 * in the inconsistent terminal and GUI world.
 		 * The best solution seems like to produce '\n' when
 		 * something is copied from st and convert '\n' to
 		 * '\r', when something to be pasted is received by
 		 * st.
-		 * FIXME: Fix the computer world.
-		 */
+		 * FIXME: Fix the computer world. */
 		if ((y < sel.ne.y || lastx >= linelen) &&
 		    (!(last->mode & ATTR_WRAP) || sel.type == SEL_RECTANGULAR))
 			*ptr++ = '\n';
@@ -683,12 +676,10 @@ ttywriteraw(const char *s, size_t n)
 	ssize_t r;
 	size_t lim = 256;
 
-	/*
-	 * Remember that we are using a pty, which might be a modem line.
+	/* Remember that we are using a pty, which might be a modem line.
 	 * Writing too much will clog the line. That's why we are doing this
 	 * dance.
-	 * FIXME: Migrate the world to Plan 9.
-	 */
+	 * FIXME: Migrate the world to Plan 9. */
 	while (n > 0) {
 		FD_ZERO(&wfd);
 		FD_ZERO(&rfd);
@@ -702,19 +693,15 @@ ttywriteraw(const char *s, size_t n)
 			die("select failed: %s\n", strerror(errno));
 		}
 		if (FD_ISSET(cmdfd, &wfd)) {
-			/*
-			 * Only write the bytes written by ttywrite() or the
+			/* Only write the bytes written by ttywrite() or the
 			 * default of 256. This seems to be a reasonable value
-			 * for a serial line. Bigger values might clog the I/O.
-			 */
+			 * for a serial line. Bigger values might clog the I/O. */
 			if ((r = write(cmdfd, s, (n < lim)? n : lim)) < 0)
 				goto write_error;
 			if (r < n) {
-				/*
-				 * We weren't able to write out everything.
+				/* We weren't able to write out everything.
 				 * This means the buffer is getting full
-				 * again. Empty it.
-				 */
+				 * again. Empty it. */
 				if (n < lim)
 					lim = ttyread();
 				n -= r;
@@ -1003,9 +990,7 @@ tsetchar(Rune u, const Glyph *attr, int x, int y)
 		"│", "≤", "≥", "π", "≠", "£", "·", /* x - ~ */
 	};
 
-	/*
-	 * The table is proudly stolen from rxvt.
-	 */
+	/* The table is proudly stolen from rxvt. */
 	if (term.trantbl[term.charset] == CS_GRAPHIC0 &&
 	   BETWEEN(u, 0x41, 0x7e) && vt100_0[u - 0x41])
 		utf8dec(vt100_0[u - 0x41], &u, UTF_SIZ);
@@ -1694,10 +1679,8 @@ strhandle(void)
 				fprintf(stderr, "erresc: invalid color j=%d, p=%s\n",
 				        j, p ? p : "(null)");
 			} else {
-				/*
-				 * TODO if defaultbg color is changed, borders
-				 * are dirty
-				 */
+				/* TODO if defaultbg color is changed, borders
+				 * are dirty */
 				redraw();
 			}
 			return;
@@ -2004,10 +1987,8 @@ tcontrolcode(uchar ascii)
 	term.esc &= ~(ESC_STR_END|ESC_STR);
 }
 
-/*
- * returns 1 when the sequence is finished and it hasn't to read
- * more characters for this sequence, otherwise 0
- */
+/* returns 1 when the sequence is finished and it hasn't to read
+ * more characters for this sequence, otherwise 0 */
 int
 eschandle(uchar ascii)
 {
@@ -2112,12 +2093,10 @@ tputc(Rune u)
 	if (IS_SET(MODE_PRINT))
 		tprinter(c, len);
 
-	/*
-	 * STR sequence must be checked before anything else
+	/* STR sequence must be checked before anything else
 	 * because it uses all following characters until it
 	 * receives a ESC, a SUB, a ST or any other C1 control
-	 * character.
-	 */
+	 * character. */
 	if (term.esc & ESC_STR) {
 		if (u == '\a' || u == 030 || u == 032 || u == 033 ||
 		   ISCONTROLC1(u)) {
@@ -2127,19 +2106,15 @@ tputc(Rune u)
 		}
 
 		if (strescseq.len+len >= strescseq.siz) {
-			/*
-			 * Here is a bug in terminals. If the user never sends
+			/* Here is a bug in terminals. If the user never sends
 			 * some code to stop the str or esc command, then st
 			 * will stop responding. But this is better than
 			 * silently failing with unknown characters. At least
 			 * then users will report back.
 			 *
-			 * In the case users ever get fixed, here is the code:
-			 */
-			/*
-			 * term.esc = 0;
-			 * strhandle();
-			 */
+			 * In the case users ever get fixed, here is the code: */
+			/* term.esc = 0;
+			 * strhandle(); */
 			if (strescseq.siz > (SIZE_MAX - UTF_SIZ) / 2)
 				return;
 			strescseq.siz *= 2;
@@ -2152,16 +2127,12 @@ tputc(Rune u)
 	}
 
 check_control_code:
-	/*
-	 * Actions of control codes must be performed as soon they arrive
+	/* Actions of control codes must be performed as soon they arrive
 	 * because they can be embedded inside a control sequence, and
-	 * they must not cause conflicts with sequences.
-	 */
+	 * they must not cause conflicts with sequences. */
 	if (control) {
 		tcontrolcode(u);
-		/*
-		 * control codes are not shown ever
-		 */
+		/* control codes are not shown ever */
 		if (!term.esc)
 			term.lastc = 0;
 		return;
@@ -2188,10 +2159,8 @@ check_control_code:
 			/* sequence already finished */
 		}
 		term.esc = 0;
-		/*
-		 * All characters which form part of a sequence are not
-		 * printed
-		 */
+		/* All characters which form part of a sequence are not
+		 * printed */
 		return;
 	}
 	if (selected(term.c.x, term.c.y))
@@ -2276,11 +2245,9 @@ tresize(int col, int row)
 		return;
 	}
 
-	/*
-	 * slide screen to keep cursor where we expect it -
+	/* slide screen to keep cursor where we expect it -
 	 * tscrollup would work here, but we can optimize to
-	 * memmove because we're freeing the earlier lines
-	 */
+	 * memmove because we're freeing the earlier lines */
 	for (i = 0; i <= term.c.y - row; i++) {
 		free(term.line[i]);
 		free(term.alt[i]);

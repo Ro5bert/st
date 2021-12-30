@@ -163,16 +163,12 @@ static void (*handler[LASTEvent])(XEvent *) = {
 	[MotionNotify] = bmotion,
 	[ButtonPress] = bpress,
 	[ButtonRelease] = brelease,
-/*
- * Uncomment if you want the selection to disappear when you select something
- * different in another window.
- */
+/* Uncomment if you want the selection to disappear when you select something
+ * different in another window. */
 /*	[SelectionClear] = selclear_, */
 	[SelectionNotify] = selnotify,
-/*
- * PropertyNotify is only turned on when there is some INCR transfer happening
- * for the selection retrieval.
- */
+/* PropertyNotify is only turned on when there is some INCR transfer happening
+ * for the selection retrieval. */
 	[PropertyNotify] = propnotify,
 	[SelectionRequest] = selrequest,
 };
@@ -486,41 +482,33 @@ selnotify(XEvent *e)
 		}
 
 		if (e->type == PropertyNotify && nitems == 0 && rem == 0) {
-			/*
-			 * If there is some PropertyNotify with no data, then
+			/* If there is some PropertyNotify with no data, then
 			 * this is the signal of the selection owner that all
 			 * data has been transferred. We won't need to receive
-			 * PropertyNotify events anymore.
-			 */
+			 * PropertyNotify events anymore. */
 			MODBIT(xw.attrs.event_mask, 0, PropertyChangeMask);
 			XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask,
 					&xw.attrs);
 		}
 
 		if (type == incratom) {
-			/*
-			 * Activate the PropertyNotify events so we receive
+			/* Activate the PropertyNotify events so we receive
 			 * when the selection owner does send us the next
-			 * chunk of data.
-			 */
+			 * chunk of data. */
 			MODBIT(xw.attrs.event_mask, 1, PropertyChangeMask);
 			XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask,
 					&xw.attrs);
 
-			/*
-			 * Deleting the property is the transfer start signal.
-			 */
+			/* Deleting the property is the transfer start signal. */
 			XDeleteProperty(xw.dpy, xw.win, (int)property);
 			continue;
 		}
 
-		/*
-		 * As seen in getsel:
+		/* As seen in getsel:
 		 * Line endings are inconsistent in the terminal and GUI world
 		 * copy and pasting. When receiving some selection data,
 		 * replace all '\n' with '\r'.
-		 * FIXME: Fix the computer world.
-		 */
+		 * FIXME: Fix the computer world. */
 		repl = data;
 		last = data + nitems * format / 8;
 		while ((repl = memchr(repl, '\n', last - repl))) {
@@ -537,10 +525,8 @@ selnotify(XEvent *e)
 		ofs += nitems * format / 32;
 	} while (rem > 0);
 
-	/*
-	 * Deleting the property again tells the selection owner to send the
-	 * next data chunk in the property.
-	 */
+	/* Deleting the property again tells the selection owner to send the
+	 * next data chunk in the property. */
 	XDeleteProperty(xw.dpy, xw.win, (int)property);
 }
 
@@ -579,10 +565,8 @@ selrequest(XEvent *e)
 				(uchar *) &string, 1);
 		xev.property = xsre->property;
 	} else if (xsre->target == xsel.xtarget || xsre->target == XA_STRING) {
-		/*
-		 * xith XA_STRING non ascii characters may be incorrect in the
-		 * requestor. It is not our problem, use utf8.
-		 */
+		/* xith XA_STRING non ascii characters may be incorrect in the
+		 * requestor. It is not our problem, use utf8. */
 		clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
 		if (xsre->selection == XA_PRIMARY) {
 			seltext = xsel.primary;
@@ -750,9 +734,7 @@ xsetcolorname(int x, const char *name)
 	return 0;
 }
 
-/*
- * Absolute coordinates.
- */
+/* Absolute coordinates. */
 void
 xclear(int x1, int y1, int x2, int y2)
 {
@@ -821,11 +803,9 @@ xloadfont(Font *f, FcPattern *pattern)
 	XGlyphInfo extents;
 	int wantattr, haveattr;
 
-	/*
-	 * Manually configure instead of calling XftMatchFont
+	/* Manually configure instead of calling XftMatchFont
 	 * so that we can use the configured pattern for
-	 * "missing glyph" lookups.
-	 */
+	 * "missing glyph" lookups. */
 	configured = FcPatternDuplicate(pattern);
 	if (!configured)
 		return 1;
@@ -847,10 +827,8 @@ xloadfont(Font *f, FcPattern *pattern)
 
 	if ((XftPatternGetInteger(pattern, "slant", 0, &wantattr) ==
 	    XftResultMatch)) {
-		/*
-		 * Check if xft was unable to find a font with the appropriate
-		 * slant but gave us one anyway. Try to mitigate.
-		 */
+		/* Check if xft was unable to find a font with the appropriate
+		 * slant but gave us one anyway. Try to mitigate. */
 		if ((XftPatternGetInteger(f->match->pattern, "slant", 0,
 		    &haveattr) != XftResultMatch) || haveattr < wantattr) {
 			f->badslant = 1;
@@ -912,10 +890,8 @@ xloadfonts(const char *fontstr, double fontsize)
 				FcResultMatch) {
 			usedfontsize = -1;
 		} else {
-			/*
-			 * Default font size is 12, if none given. This is to
-			 * have a known usedfontsize value.
-			 */
+			/* Default font size is 12, if none given. This is to
+			 * have a known usedfontsize value. */
 			FcPatternAddDouble(pattern, FC_PIXEL_SIZE, 12);
 			usedfontsize = 12;
 		}
@@ -1220,13 +1196,11 @@ xmakeglyphfontspecs(XftGlyphFontSpec *specs, const Glyph *glyphs, int len, int x
 				                       1, 0, &fcres);
 			fcsets[0] = font->set;
 
-			/*
-			 * Nothing was found in the cache. Now use
+			/* Nothing was found in the cache. Now use
 			 * some dozen of Fontconfig calls to get the
 			 * font for one single character.
 			 *
-			 * Xft and fontconfig are design failures.
-			 */
+			 * Xft and fontconfig are design failures. */
 			fcpattern = FcPatternDuplicate(font->pattern);
 			fccharset = FcCharSetCreate();
 
@@ -1434,9 +1408,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	if (IS_SET(MODE_HIDE))
 		return;
 
-	/*
-	 * Select the right color for the right mode.
-	 */
+	/* Select the right color for the right mode. */
 	g.mode &= ATTR_BOLD|ATTR_ITALIC|ATTR_UNDERLINE|ATTR_STRUCK|ATTR_WIDE;
 
 	if (IS_SET(MODE_REVERSE)) {
@@ -1793,10 +1765,8 @@ krelease(XEvent *e)
 void
 cmessage(XEvent *e)
 {
-	/*
-	 * See xembed specs
-	 *  http://standards.freedesktop.org/xembed-spec/xembed-spec-latest.html
-	 */
+	/* See xembed specs
+	 *  http://standards.freedesktop.org/xembed-spec/xembed-spec-latest.html */
 	if (e->xclient.message_type == xw.xembed && e->xclient.format == 32) {
 		if (e->xclient.data.l[1] == XEMBED_FOCUS_IN) {
 			win.mode |= MODE_FOCUSED;
@@ -1832,11 +1802,9 @@ run(void)
 	/* Waiting for window mapping */
 	do {
 		XNextEvent(xw.dpy, &ev);
-		/*
-		 * This XFilterEvent call is required because of XOpenIM. It
+		/* This XFilterEvent call is required because of XOpenIM. It
 		 * does filter out the key event and some client message for
-		 * the input method too.
-		 */
+		 * the input method too. */
 		if (XFilterEvent(&ev, None))
 			continue;
 		if (ev.type == ConfigureNotify) {
@@ -1880,8 +1848,7 @@ run(void)
 				(handler[ev.type])(&ev);
 		}
 
-		/*
-		 * To reduce flicker and tearing, when new content or event
+		/* To reduce flicker and tearing, when new content or event
 		 * triggers drawing, we first wait a bit to ensure we got
 		 * everything, and if nothing new arrives - we draw.
 		 * We start with trying to wait minlatency ms. If more content
@@ -1889,8 +1856,7 @@ run(void)
 		 * and eventually draw even without idle after maxlatency ms.
 		 * Typically this results in low latency while interacting,
 		 * maximum latency intervals during `cat huge.txt`, and perfect
-		 * sync with periodic updates from animations/key-repeats/etc.
-		 */
+		 * sync with periodic updates from animations/key-repeats/etc. */
 		if (FD_ISSET(ttyfd, &rfd) || xev) {
 			if (!drawing) {
 				trigger = now;
