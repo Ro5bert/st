@@ -320,7 +320,7 @@ selected(int x, int y)
 
 	if (sel.type == SEL_RECTANGULAR)
 		return BETWEEN(y, sel.nb.y, sel.ne.y)
-		    && BETWEEN(x, sel.nb.x, sel.ne.x);
+			&& BETWEEN(x, sel.nb.x, sel.ne.x);
 
 	return BETWEEN(y, sel.nb.y, sel.ne.y)
 	    && (y != sel.nb.y || x >= sel.nb.x)
@@ -468,9 +468,9 @@ execsh(char *cmd, char **args)
 	errno = 0;
 	if ((pw = getpwuid(getuid())) == NULL) {
 		if (errno)
-			die("getpwuid: %s\n", strerror(errno));
+			die("getpwuid failed: %s\n", strerror(errno));
 		else
-			die("who are you?\n");
+			die("who are you? (password file entry not found)\n");
 	}
 
 	if ((sh = getenv("SHELL")) == NULL)
@@ -551,7 +551,7 @@ stty(char **args)
 	}
 	*q = '\0';
 	if (system(cmd) != 0)
-		perror("Couldn't call stty");
+		perror("failed to call stty");
 }
 
 int
@@ -561,24 +561,22 @@ ttynew(const char *line, char *cmd, const char *out, char **args)
 
 	if (out) {
 		term.mode |= MODE_PRINT;
-		iofd = (!strcmp(out, "-")) ?
-			  1 : open(out, O_WRONLY | O_CREAT, 0666);
-		if (iofd < 0) {
-			fprintf(stderr, "Error opening %s:%s\n",
-				out, strerror(errno));
-		}
+		iofd = (!strcmp(out, "-")) ? 1 : open(out, O_WRONLY | O_CREAT, 0666);
+		if (iofd < 0)
+			fprintf(stderr, "open '%s' failed: %s\n", out, strerror(errno));
 	}
 
 	if (line) {
 		if ((cmdfd = open(line, O_RDWR)) < 0)
-			die("open line '%s' failed: %s\n",
-			    line, strerror(errno));
+			die("open line '%s' failed: %s\n", line, strerror(errno));
 		dup2(cmdfd, 0);
 		stty(args);
 		return cmdfd;
 	}
 
-	/* seems to work fine on linux, openbsd and freebsd */
+	/* openpty is BSD function, but it is implemented by glibc and
+	 * musl on linux, so this should be ok. */
+	/* TODO: don't we essentially do a forkpty here? Let's use that instead */
 	if (openpty(&m, &s, NULL, NULL, NULL) < 0)
 		die("openpty failed: %s\n", strerror(errno));
 
@@ -598,14 +596,14 @@ ttynew(const char *line, char *cmd, const char *out, char **args)
 		close(m);
 #ifdef __OpenBSD__
 		if (pledge("stdio getpw proc exec", NULL) == -1)
-			die("pledge\n");
+			die("pledge failed\n");
 #endif
 		execsh(cmd, args);
 		break;
 	default:
 #ifdef __OpenBSD__
 		if (pledge("stdio rpath tty proc", NULL) == -1)
-			die("pledge\n");
+			die("pledge failed\n");
 #endif
 		close(s);
 		cmdfd = m;
@@ -629,7 +627,7 @@ ttyread(void)
 	case 0:
 		exit(0);
 	case -1:
-		die("couldn't read from shell: %s\n", strerror(errno));
+		die("read from shell failed: %s\n", strerror(errno));
 	default:
 		buflen += ret;
 		written = twrite(buf, buflen, 0);
@@ -676,9 +674,8 @@ ttywriteraw(const char *s, size_t n)
 	ssize_t r;
 	size_t lim = 256;
 
-	/* Remember that we are using a pty, which might be a modem line.
-	 * Writing too much will clog the line. That's why we are doing this
-	 * dance.
+	/* Remember that we are using a pty, which might be a modem line. Writing
+	 * too much will clog the line. That's why we are doing this dance.
 	 * FIXME: Migrate the world to Plan 9. */
 	while (n > 0) {
 		FD_ZERO(&wfd);
@@ -699,9 +696,8 @@ ttywriteraw(const char *s, size_t n)
 			if ((r = write(cmdfd, s, (n < lim)? n : lim)) < 0)
 				goto write_error;
 			if (r < n) {
-				/* We weren't able to write out everything.
-				 * This means the buffer is getting full
-				 * again. Empty it. */
+				/* We weren't able to write out everything. This means the
+				 * buffer is getting full again. Empty it. */
 				if (n < lim)
 					lim = ttyread();
 				n -= r;
@@ -717,7 +713,7 @@ ttywriteraw(const char *s, size_t n)
 	return;
 
 write_error:
-	die("write error on tty: %s\n", strerror(errno));
+	die("write on tty failed: %s\n", strerror(errno));
 }
 
 void
@@ -730,7 +726,7 @@ ttyresize(int tw, int th)
 	w.ws_xpixel = tw;
 	w.ws_ypixel = th;
 	if (ioctl(cmdfd, TIOCSWINSZ, &w) < 0)
-		fprintf(stderr, "Couldn't set window size: %s\n", strerror(errno));
+		fprintf(stderr, "failed to set window size: %s\n", strerror(errno));
 }
 
 void
@@ -901,11 +897,10 @@ selscroll(int orig, int n)
 		sel.ob.y += n;
 		sel.oe.y += n;
 		if (sel.ob.y < term.top || sel.ob.y > term.bot ||
-		    sel.oe.y < term.top || sel.oe.y > term.bot) {
+				sel.oe.y < term.top || sel.oe.y > term.bot)
 			selclear();
-		} else {
+		else
 			selnormalize();
-		}
 	}
 }
 
@@ -914,11 +909,10 @@ tnewline(int first_col)
 {
 	int y = term.c.y;
 
-	if (y == term.bot) {
+	if (y == term.bot)
 		tscrollup(term.top, 1);
-	} else {
+	else
 		y++;
-	}
 	tmoveto(first_col ? 0 : term.c.x, y);
 }
 
@@ -992,7 +986,7 @@ tsetchar(Rune u, const Glyph *attr, int x, int y)
 
 	/* The table is proudly stolen from rxvt. */
 	if (term.trantbl[term.charset] == CS_GRAPHIC0 &&
-	   BETWEEN(u, 0x41, 0x7e) && vt100_0[u - 0x41])
+			BETWEEN(u, 0x41, 0x7e) && vt100_0[u - 0x41])
 		utf8dec(vt100_0[u - 0x41], &u, UTF_SIZ);
 
 	if (term.line[y][x].mode & ATTR_WIDE) {
@@ -1098,8 +1092,8 @@ tdefcolor(const int *attr, int *npar, int l)
 	case 2: /* direct color in RGB space */
 		if (*npar + 4 >= l) {
 			fprintf(stderr,
-				"erresc(38): Incorrect number of parameters (%d)\n",
-				*npar);
+					"erresc(38): Incorrect number of parameters (%d)\n",
+					*npar);
 			break;
 		}
 		r = attr[*npar + 2];
@@ -1107,16 +1101,15 @@ tdefcolor(const int *attr, int *npar, int l)
 		b = attr[*npar + 4];
 		*npar += 4;
 		if (!BETWEEN(r, 0, 255) || !BETWEEN(g, 0, 255) || !BETWEEN(b, 0, 255))
-			fprintf(stderr, "erresc: bad rgb color (%u,%u,%u)\n",
-				r, g, b);
+			fprintf(stderr, "erresc: bad rgb color (%u,%u,%u)\n", r, g, b);
 		else
 			idx = TRUECOLOR(r, g, b);
 		break;
 	case 5: /* indexed color */
 		if (*npar + 2 >= l) {
 			fprintf(stderr,
-				"erresc(38): Incorrect number of parameters (%d)\n",
-				*npar);
+					"erresc(38): Incorrect number of parameters (%d)\n",
+					*npar);
 			break;
 		}
 		*npar += 2;
@@ -1130,8 +1123,7 @@ tdefcolor(const int *attr, int *npar, int l)
 	case 3: /* direct color in CMY space */
 	case 4: /* direct color in CMYK space */
 	default:
-		fprintf(stderr,
-		        "erresc(38): gfx attr %d unknown\n", attr[*npar]);
+		fprintf(stderr, "erresc(38): gfx attr %d unknown\n", attr[*npar]);
 		break;
 	}
 
@@ -1231,8 +1223,8 @@ tsetattr(const int *attr, int l)
 				term.c.attr.bg = attr[i] - 100 + 8;
 			} else {
 				fprintf(stderr,
-					"erresc(default): gfx attr %d unknown\n",
-					attr[i]);
+						"erresc(default): gfx attr %d unknown\n",
+						attr[i]);
 				csidump();
 			}
 			break;
@@ -1329,10 +1321,8 @@ tsetmode(int priv, int set, const int *args, int narg)
 				if (!allowaltscreen)
 					break;
 				alt = IS_SET(MODE_ALTSCREEN);
-				if (alt) {
-					tclearregion(0, 0, term.col-1,
-							term.row-1);
-				}
+				if (alt)
+					tclearregion(0, 0, term.col-1, term.row-1);
 				if (set ^ alt) /* set is always 1 or 0 */
 					tswapscreen();
 				if (*args != 1049)
@@ -1356,8 +1346,8 @@ tsetmode(int priv, int set, const int *args, int narg)
 				break;
 			default:
 				fprintf(stderr,
-					"erresc: unknown private set/reset mode %d\n",
-					*args);
+						"erresc: unknown private set/reset mode %d\n",
+						*args);
 				break;
 			}
 		} else {
@@ -1377,9 +1367,7 @@ tsetmode(int priv, int set, const int *args, int narg)
 				MODBIT(term.mode, set, MODE_CRLF);
 				break;
 			default:
-				fprintf(stderr,
-					"erresc: unknown set/reset mode %d\n",
-					*args);
+				fprintf(stderr, "erresc: unknown set/reset mode %d\n", *args);
 				break;
 			}
 		}
@@ -1437,9 +1425,10 @@ csihandle(void)
 		break;
 	case 'b': /* REP -- if last char is printable print it <n> more times */
 		DEFAULT(csiescseq.arg[0], 1);
-		if (term.lastc)
+		if (term.lastc) {
 			while (csiescseq.arg[0]-- > 0)
 				tputc(term.lastc);
+		}
 		break;
 	case 'C': /* CUF -- Cursor <n> Forward */
 	case 'a': /* HPR -- Cursor <n> Forward */
@@ -1489,10 +1478,8 @@ csihandle(void)
 		switch (csiescseq.arg[0]) {
 		case 0: /* below */
 			tclearregion(term.c.x, term.c.y, term.col-1, term.c.y);
-			if (term.c.y < term.row-1) {
-				tclearregion(0, term.c.y+1, term.col-1,
-						term.row-1);
-			}
+			if (term.c.y < term.row-1)
+				tclearregion(0, term.c.y+1, term.col-1, term.row-1);
 			break;
 		case 1: /* above */
 			if (term.c.y > 1)
@@ -1509,8 +1496,7 @@ csihandle(void)
 	case 'K': /* EL -- Clear line */
 		switch (csiescseq.arg[0]) {
 		case 0: /* right */
-			tclearregion(term.c.x, term.c.y, term.col-1,
-					term.c.y);
+			tclearregion(term.c.x, term.c.y, term.col-1, term.c.y);
 			break;
 		case 1: /* left */
 			tclearregion(0, term.c.y, term.c.x, term.c.y);
@@ -1607,17 +1593,16 @@ csidump(void)
 	fprintf(stderr, "ESC[");
 	for (i = 0; i < csiescseq.len; i++) {
 		c = csiescseq.buf[i] & 0xff;
-		if (isprint(c)) {
+		if (isprint(c))
 			putc(c, stderr);
-		} else if (c == '\n') {
+		else if (c == '\n')
 			fprintf(stderr, "(\\n)");
-		} else if (c == '\r') {
+		else if (c == '\r')
 			fprintf(stderr, "(\\r)");
-		} else if (c == 0x1b) {
+		else if (c == 0x1b)
 			fprintf(stderr, "(\\e)");
-		} else {
+		else
 			fprintf(stderr, "(%02x)", c);
-		}
 	}
 	putc('\n', stderr);
 }
@@ -1679,8 +1664,7 @@ strhandle(void)
 				fprintf(stderr, "erresc: invalid color j=%d, p=%s\n",
 				        j, p ? p : "(null)");
 			} else {
-				/* TODO if defaultbg color is changed, borders
-				 * are dirty */
+				/* TODO if defaultbg color is changed, borders are dirty */
 				redraw();
 			}
 			return;
@@ -1848,11 +1832,10 @@ tdeftran(char ascii)
 	static int vcs[] = {CS_GRAPHIC0, CS_USA};
 	char *p;
 
-	if ((p = strchr(cs, ascii)) == NULL) {
+	if ((p = strchr(cs, ascii)) == NULL)
 		fprintf(stderr, "esc unhandled charset: ESC ( %c\n", ascii);
-	} else {
+	else
 		term.trantbl[term.icharset] = vcs[p - cs];
-	}
 }
 
 void
@@ -2021,11 +2004,10 @@ eschandle(uchar ascii)
 		term.esc |= ESC_ALTCHARSET;
 		return 0;
 	case 'D': /* IND -- Linefeed */
-		if (term.c.y == term.bot) {
+		if (term.c.y == term.bot)
 			tscrollup(term.top, 1);
-		} else {
+		else
 			tmoveto(term.c.x, term.c.y+1);
-		}
 		break;
 	case 'E': /* NEL -- Next line */
 		tnewline(1); /* always go to first col */
@@ -2034,19 +2016,18 @@ eschandle(uchar ascii)
 		term.tabs[term.c.x] = 1;
 		break;
 	case 'M': /* RI -- Reverse index */
-		if (term.c.y == term.top) {
+		if (term.c.y == term.top)
 			tscrolldown(term.top, 1);
-		} else {
+		else
 			tmoveto(term.c.x, term.c.y-1);
-		}
 		break;
 	case 'Z': /* DECID -- Identify Terminal */
 		ttywrite(vtiden, strlen(vtiden), 0);
 		break;
 	case 'c': /* RIS -- Reset to initial state */
 		treset();
-		resettitle();
-		xloadcols();
+		xsettitle(NULL);
+		xloadcolors();
 		break;
 	case '=': /* DECPAM -- Application keypad */
 		xsetmode(1, MODE_APPKEYPAD);
@@ -2066,7 +2047,7 @@ eschandle(uchar ascii)
 		break;
 	default:
 		fprintf(stderr, "erresc: unknown sequence ESC 0x%02X '%c'\n",
-			(uchar) ascii, isprint(ascii)? ascii:'.');
+				(uchar) ascii, isprint(ascii)? ascii:'.');
 		break;
 	}
 	return 1;
@@ -2139,9 +2120,8 @@ check_control_code:
 	} else if (term.esc & ESC_START) {
 		if (term.esc & ESC_CSI) {
 			csiescseq.buf[csiescseq.len++] = u;
-			if (BETWEEN(u, 0x40, 0x7E)
-					|| csiescseq.len >= \
-					sizeof(csiescseq.buf)-1) {
+			if (BETWEEN(u, 0x40, 0x7E) ||
+					csiescseq.len >= sizeof(csiescseq.buf)-1) {
 				term.esc = 0;
 				csiparse();
 				csihandle();
@@ -2191,11 +2171,10 @@ check_control_code:
 			gp[1].mode = ATTR_WDUMMY;
 		}
 	}
-	if (term.c.x+width < term.col) {
+	if (term.c.x+width < term.col)
 		tmoveto(term.c.x+width, term.c.y);
-	} else {
+	else
 		term.c.state |= CURSOR_WRAPNEXT;
-	}
 }
 
 int
@@ -2240,8 +2219,7 @@ tresize(int col, int row)
 	TCursor c;
 
 	if (col < 1 || row < 1) {
-		fprintf(stderr,
-		        "tresize: error resizing to %dx%d\n", col, row);
+		fprintf(stderr, "tresize: error resizing to %dx%d\n", col, row);
 		return;
 	}
 
@@ -2298,22 +2276,14 @@ tresize(int col, int row)
 	/* Clearing both screens (it makes dirty all lines) */
 	c = term.c;
 	for (i = 0; i < 2; i++) {
-		if (mincol < col && 0 < minrow) {
+		if (mincol < col && 0 < minrow)
 			tclearregion(mincol, 0, col - 1, minrow - 1);
-		}
-		if (0 < col && minrow < row) {
+		if (0 < col && minrow < row)
 			tclearregion(0, minrow, col - 1, row - 1);
-		}
 		tswapscreen();
 		tcursor(CURSOR_LOAD);
 	}
 	term.c = c;
-}
-
-void
-resettitle(void)
-{
-	xsettitle(NULL);
 }
 
 void

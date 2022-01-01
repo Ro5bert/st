@@ -129,9 +129,10 @@ utf8dec(const char *c, Rune *u, size_t clen)
 Rune
 utf8decbyte(char c, size_t *i)
 {
-	for (*i = 0; *i < LEN(utfmask); ++(*i))
+	for (*i = 0; *i < LEN(utfmask); ++(*i)) {
 		if (((uchar)c & utfmask[*i]) == utfbyte[*i])
 			return (uchar)c & ~utfmask[*i];
+	}
 
 	return 0;
 }
