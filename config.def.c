@@ -25,7 +25,7 @@ static void sendbreak(uint, Arg);
 static void togprinter(uint, Arg);
 
 /* See: http://freedesktop.org/software/fontconfig/fontconfig-user.html */
-char *font = "Fira Mono:pixelsize=32:antialias=true:autohint=true";
+char *font = "monospace:pixelsize=32:antialias=true:autohint=true";
 int borderpx = 2;
 /* Kerning / character bounding-box multipliers */
 float cwscale = 1.0;
