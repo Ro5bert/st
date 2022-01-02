@@ -1,3 +1,5 @@
+/* See LICENSE for license details. */
+
 #include <ctype.h>
 #include <errno.h>
 #include <unistd.h>
@@ -7,10 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-#include <X11/Xlib.h>
 
-#include "util.h"
-#include "config.h"
+#include "st.h"
 
 static Rune utf8decbyte(char, size_t *);
 static char utf8encbyte(Rune, size_t);

@@ -1,4 +1,5 @@
 /* See LICENSE file for license details. */
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <wchar.h>
@@ -6,10 +7,7 @@
 #include <X11/cursorfont.h>
 #include <X11/keysym.h>
 
-#include "util.h"
-#include "config.h"
 #include "st.h"
-#include "win.h"
 
 static void clipcopy(uint, Arg);
 static void clippaste(uint, Arg);
@@ -133,8 +131,8 @@ uint defaultrcs = 259;
  * 7: Snowman ("☃") */
 uint cursorshape = 2;
 
-uint cols = 80;
-uint rows = 24;
+uint defaultcols = 80;
+uint defaultrows = 24;
 
 /* Default colour and shape of the mouse cursor */
 uint mouseshape = XC_xterm;

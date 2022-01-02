@@ -1,5 +1,5 @@
 /* See LICENSE file for license details. */
-/* Requires: wchar.h, X11/X.h, util.h */
+/* Requires: wchar.h, X11/X.h */
 
 #define CURS (1<<0) /* Application cursor mode */
 #define KPAD (1<<1) /* Application keypad mode */
@@ -92,8 +92,8 @@ extern uint defaultbg;
 extern uint defaultcs;
 extern uint defaultrcs;
 extern uint cursorshape;
-extern uint cols;
-extern uint rows;
+extern uint defaultcols;
+extern uint defaultrows;
 extern uint mouseshape;
 extern uint mousefg;
 extern uint mousebg;

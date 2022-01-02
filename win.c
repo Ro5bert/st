@@ -1,8 +1,8 @@
 /* See LICENSE for license details. */
+
 #include <errno.h>
 #include <math.h>
 #include <limits.h>
-#include <locale.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -18,12 +18,7 @@
 #include <X11/Xft/Xft.h>
 #include <X11/XKBlib.h>
 
-char *argv0;
-#include "arg.h"
-#include "util.h"
-#include "config.h"
 #include "st.h"
-#include "win.h"
 
 /* XEMBED messages */
 #define XEMBED_FOCUS_IN  4
@@ -101,6 +96,7 @@ typedef struct {
 	GC gc;
 } DC;
 
+static inline int glyphattrcmp(Glyph, Glyph);
 static inline ushort sixd_to_16bit(int);
 static int xmakeglyphfontspecs(XftGlyphFontSpec *, const Glyph *, int, int, int);
 static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int);
@@ -111,7 +107,6 @@ static int ximopen(Display *);
 static void ximinstantiate(Display *, XPointer, XPointer);
 static void ximdestroy(XIM, XPointer, XPointer);
 static int xicdestroy(XIC, XPointer, XPointer);
-static void xinit(int, int);
 static void cresize(int, int);
 static void xresize(int, int);
 static void xhints(void);
@@ -146,9 +141,6 @@ static void selrequest(XEvent *);
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
 static void mousereport(XEvent *);
-
-static void run(void);
-static void usage(void);
 
 static void (*handler[LASTEvent])(XEvent *) = {
 	[KeyPress] = kpress,
@@ -200,15 +192,6 @@ static int frccap = 0;
 static char *usedfont = NULL;
 static double usedfontsize = 0;
 static double defaultfontsize = 0;
-
-static char *opt_class = NULL;
-static char **opt_cmd  = NULL;
-static char *opt_embed = NULL;
-static char *opt_font  = NULL;
-static char *opt_io    = NULL;
-static char *opt_line  = NULL;
-static char *opt_name  = NULL;
-static char *opt_title = NULL;
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
 
@@ -308,7 +291,7 @@ mousesel(XEvent *e, int done)
 
 	selextend(evcol(e), evrow(e), type, done);
 	if (done)
-		setsel(getsel(), e->xbutton.time);
+		setsel(seltext(), e->xbutton.time);
 }
 
 void
@@ -412,9 +395,9 @@ bpress(XEvent *e)
 		 * snapping behaviour is exposed. */
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		if (TIMEDIFF(now, xsel.tclick2) <= tripleclicktimeout) {
-			snap = SNAP_LINE;
+			snap = SEL_SNAP_LINE;
 		} else if (TIMEDIFF(now, xsel.tclick1) <= doubleclicktimeout) {
-			snap = SNAP_WORD;
+			snap = SEL_SNAP_WORD;
 		} else {
 			snap = 0;
 		}
@@ -504,16 +487,15 @@ selnotify(XEvent *e)
 			continue;
 		}
 
-		/* As seen in getsel:
+		/* As seen in seltext:
 		 * Line endings are inconsistent in the terminal and GUI world
 		 * copy and pasting. When receiving some selection data,
 		 * replace all '\n' with '\r'.
 		 * FIXME: Fix the computer world. */
 		repl = data;
 		last = data + nitems * format / 8;
-		while ((repl = memchr(repl, '\n', last - repl))) {
+		while ((repl = memchr(repl, '\n', last - repl)))
 			*repl++ = '\r';
-		}
 
 		if (IS_SET(MODE_BRCKTPASTE) && ofs == 0)
 			ttywrite("\033[200~", 6, 0);
@@ -1011,6 +993,14 @@ xinit(int cols, int rows)
 	pid_t thispid = getpid();
 	XColor xmousefg, xmousebg;
 
+	/* XXX: check this (moved from main) */
+	xw.l = xw.t = 0;
+	xw.isfixed = opt_fixed;
+	xsetcursor(cursorshape);
+
+	if (opt_geom)
+		xw.gm = XParseGeometry(opt_geom, &xw.l, &xw.t, &cols, &rows);
+
 	if (!(xw.dpy = XOpenDisplay(NULL)))
 		die("open display failed\n");
 	xw.scr = XDefaultScreen(xw.dpy);
@@ -1112,6 +1102,9 @@ xinit(int cols, int rows)
 	xsel.xtarget = XInternAtom(xw.dpy, "UTF8_STRING", 0);
 	if (xsel.xtarget == None)
 		xsel.xtarget = XA_STRING;
+
+	/* XXX: check this (moved from main) */
+	xsetenv();
 }
 
 int
@@ -1262,7 +1255,7 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 		base.fg = defaultattr;
 	}
 
-	if (IS_TRUECOL(base.fg)) {
+	if (IS_TRUECOLOR(base.fg)) {
 		colfg.alpha = 0xffff;
 		colfg.red = TRUERED(base.fg);
 		colfg.green = TRUEGREEN(base.fg);
@@ -1273,7 +1266,7 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 		fg = &dc.col[base.fg];
 	}
 
-	if (IS_TRUECOL(base.bg)) {
+	if (IS_TRUECOLOR(base.bg)) {
 		colbg.alpha = 0xffff;
 		colbg.green = TRUEGREEN(base.bg);
 		colbg.red = TRUERED(base.bg);
@@ -1390,7 +1383,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	Color drawcol;
 
 	/* remove the old cursor */
-	if (selected(ox, oy))
+	if (selcontains(ox, oy))
 		og.mode ^= ATTR_REVERSE;
 	xdrawglyph(og, ox, oy);
 
@@ -1403,7 +1396,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	if (IS_SET(MODE_REVERSE)) {
 		g.mode |= ATTR_REVERSE;
 		g.bg = defaultfg;
-		if (selected(cx, cy)) {
+		if (selcontains(cx, cy)) {
 			drawcol = dc.col[defaultcs];
 			g.fg = defaultrcs;
 		} else {
@@ -1411,7 +1404,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 			g.fg = defaultcs;
 		}
 	} else {
-		if (selected(cx, cy)) {
+		if (selcontains(cx, cy)) {
 			g.fg = defaultfg;
 			g.bg = defaultrcs;
 		} else {
@@ -1507,6 +1500,12 @@ xstartdraw(void)
 	return IS_SET(MODE_VISIBLE);
 }
 
+int
+glyphattrcmp(Glyph a, Glyph b)
+{
+	return a.mode != b.mode || a.fg != b.fg || a.bg != b.bg;
+}
+
 void
 xdrawline(Line line, int x1, int y1, int x2)
 {
@@ -1520,9 +1519,9 @@ xdrawline(Line line, int x1, int y1, int x2)
 		new = line[x];
 		if (new.mode == ATTR_WDUMMY)
 			continue;
-		if (selected(x, y1))
+		if (selcontains(x, y1))
 			new.mode ^= ATTR_REVERSE;
-		if (i > 0 && ATTRCMP(base, new)) {
+		if (i > 0 && glyphattrcmp(base, new)) {
 			xdrawglyphfontspecs(specs, base, i, ox, y1);
 			specs += i;
 			numspecs -= i;
@@ -1774,7 +1773,7 @@ resize(XEvent *e)
 }
 
 void
-run(void)
+xmain(void)
 {
 	XEvent ev;
 	int w = win.w, h = win.h;
@@ -1870,91 +1869,4 @@ run(void)
 		XFlush(xw.dpy);
 		drawing = 0;
 	}
-}
-
-void
-usage(void)
-{
-	die("usage: %s [-aiv] [-c class] [-f font] [-g geometry]"
-	    " [-n name] [-o file]\n"
-	    "          [-T title] [-t title] [-w windowid]"
-	    " [[-e] command [args ...]]\n"
-	    "       %s [-aiv] [-c class] [-f font] [-g geometry]"
-	    " [-n name] [-o file]\n"
-	    "          [-T title] [-t title] [-w windowid] -l line"
-	    " [stty_args ...]\n", argv0, argv0);
-}
-
-/* TODO it is weird that main is in x.c and not st.c. Probably, the tty stuff
- * should be in tty.c, the X stuff should be in win.c, and the "neutral"
- * stuff (e.g., main) should be in st.c. */
-int
-main(int argc, char *argv[])
-{
-	xw.l = xw.t = 0;
-	xw.isfixed = False;
-	/* TODO why is this here? Probably this belongs in xinit. */
-	xsetcursor(cursorshape);
-
-	ARGBEGIN {
-	case 'a':
-		allowaltscreen = 0;
-		break;
-	case 'c':
-		opt_class = EARGF(usage());
-		break;
-	case 'e':
-		if (argc > 0)
-			--argc, ++argv;
-		goto run;
-	case 'f':
-		opt_font = EARGF(usage());
-		break;
-	case 'g':
-		xw.gm = XParseGeometry(EARGF(usage()), &xw.l, &xw.t, &cols, &rows);
-		break;
-	case 'i':
-		xw.isfixed = 1;
-		break;
-	case 'o':
-		opt_io = EARGF(usage());
-		break;
-	case 'l':
-		opt_line = EARGF(usage());
-		break;
-	case 'n':
-		opt_name = EARGF(usage());
-		break;
-	case 't':
-	case 'T':
-		opt_title = EARGF(usage());
-		break;
-	case 'w':
-		opt_embed = EARGF(usage());
-		break;
-	case 'v':
-		die("%s " VERSION "\n", argv0);
-		break;
-	default:
-		usage();
-	} ARGEND;
-
-run:
-	if (argc > 0) /* eat all remaining arguments */
-		opt_cmd = argv;
-
-	if (!opt_title)
-		opt_title = (opt_line || !opt_cmd) ? "st" : opt_cmd[0];
-
-	setlocale(LC_CTYPE, "");
-	XSetLocaleModifiers("");
-	cols = MAX(cols, 1);
-	rows = MAX(rows, 1);
-	tnew(cols, rows);
-	xinit(cols, rows);
-	xsetenv();
-	selinit();
-	run();
-
-	return 0;
 }

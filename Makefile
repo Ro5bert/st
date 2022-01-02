@@ -4,7 +4,7 @@
 
 include config.mk
 
-SRC = st.c x.c config.c util.c
+SRC = st.c win.c tty.c config.c util.c
 OBJ = $(SRC:.c=.o)
 
 all: options st
@@ -23,10 +23,12 @@ config.h:
 .c.o:
 	$(CC) $(STCFLAGS) -c $<
 
-st.o: util.h config.h st.h win.h
-x.o: arg.h util.h config.h st.h win.h
-config.o: util.h config.h st.h win.h
-util.o: util.h config.h
+# TODO
+st.o: config.h st.h
+win.o: config.h st.h
+tty.o: config.h st.h
+config.o: config.h st.h
+util.o: config.h st.h
 
 $(OBJ): config.mk
 
@@ -36,7 +38,7 @@ st: $(OBJ)
 clean:
 	rm -f st $(OBJ) st-$(VERSION).tar.gz
 
-# TODO
+# TODO: incomplete
 dist: clean
 	mkdir -p st-$(VERSION)
 	cp -R FAQ LEGACY TODO LICENSE Makefile README config.mk\
