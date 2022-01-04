@@ -117,73 +117,76 @@ static void xunloadfont(Font *);
 static void xunloadfonts(void);
 static void xsetenv(void);
 static void xseturgency(int);
-static int evcol(XEvent *);
-static int evrow(XEvent *);
+
+static int evtcol(XEvent *);
+static int evtrow(XEvent *);
+static int handlesym(KeySym, uint);
 
 /* X event handlers */
-/* TODO: make names more uniform */
-static void kpress(XEvent *);
-static void krelease(XEvent *);
-static void bpress(XEvent *);
-static void brelease(XEvent *);
-static void bmotion(XEvent *);
-static void focus(XEvent *);
+/* TODO the definitions of these have inconsistencies: some call the XEvent
+ * e; some call it ev; let's change all of them to evt. */
+static void keyaction(XKeyEvent *, int);
+static void keypress(XEvent *);
+static void keyrelease(XEvent *);
+static int buttonaction(XButtonEvent *, int);
+static void buttonpress(XEvent *);
+static void buttonrelease(XEvent *);
+static void motionnotify(XEvent *);
+static void focusin(XEvent *);
+static void focusout(XEvent *);
 static void expose(XEvent *);
-static void visibility(XEvent *);
-static void unmap(XEvent *);
-static void resize(XEvent *);
-static void propnotify(XEvent *);
-static void selclear_(XEvent *);
-static void selrequest(XEvent *);
-static void selnotify(XEvent *);
-static void cmessage(XEvent *);
+static void visibilitynotify(XEvent *);
+static void unmapnotify(XEvent *);
+static void configurenotify(XEvent *);
+static void propertynotify(XEvent *);
+static void selectionclear(XEvent *);
+static void selectionrequest(XEvent *);
+static void selectionnotify(XEvent *);
+static void clientmessage(XEvent *);
 
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
 static void mousereport(XEvent *);
-static int handlesym(KeySym, uint);
-static void kaction(XKeyEvent *, int);
-static int baction(XButtonEvent *, int);
 
 /* When adding a new event type to this table, the event_mask window attribute
  * in xinit needs to be updated with the appropriate mask bit(s). */
 static void (*handler[LASTEvent])(XEvent *) = {
 	/* KeyPress (resp., KeyRelease) is generated when a keyboard key is pressed
 	 * (resp., released). */
-	[KeyPress] = kpress,
-	[KeyRelease] = krelease,
+	[KeyPress] = keypress,
+	[KeyRelease] = keyrelease,
 	/* ButtonPress (resp., ButtonRelease) is generated when a mouse button is
 	 * pressed (resp., released). */
-	[ButtonPress] = bpress,
-	[ButtonRelease] = brelease,
+	[ButtonPress] = buttonpress,
+	[ButtonRelease] = buttonrelease,
 	/* MotionNotify is generated when the mouse cursor moves. We only receive
 	 * this event when a mouse button is held down, and this event is used to
 	 * implement text selections. */
-	[MotionNotify] = bmotion,
+	[MotionNotify] = motionnotify,
 	/* FocusIn (resp., FocusOut) is generated when the window acquires (resp.,
 	 * loses) keyboard focus. (Only one window is said to have keyboard focus;
 	 * this is the window that keyboard events are sent to.) */
-	[FocusIn] = focus,
-	[FocusOut] = focus,
+	[FocusIn] = focusin,
+	[FocusOut] = focusout,
 	/* Expose is generated when part of the window has been exposed, indicating
 	 * that part of the window needs to be redrawn. */
 	[Expose] = expose,
 	/* VisibilityNotify is generated when visibility of window changes between
 	 * VisibilityUnobscured, VisibilityPartiallyObscured, and
 	 * VisibilityFullyObscured (which mean what you think). */
-	[VisibilityNotify] = visibility,
+	[VisibilityNotify] = visibilitynotify,
 	/* UnmapNotify is generated when the window is "unmapped" from a screen,
 	 * which in particular indicates that it is no longer visible. */
-	[UnmapNotify] = unmap,
+	[UnmapNotify] = unmapnotify,
 	/* ConfigureNotify is generated when various changes to the window's state,
 	 * like its size, occur. */
-	[ConfigureNotify] = resize,
+	[ConfigureNotify] = configurenotify,
 	/* PropertyNotify is generated when a window "property" is modified.
 	 * (Properties are a general way to communicate information between
 	 * applications.) We only reveive PropertyNotify events when there is some
 	 * INCR transfer happening for the selection retrieval. (An INCR transfer
 	 * is an incremental data transfer; these are used for large payloads.) */
-	[PropertyNotify] = propnotify,
+	[PropertyNotify] = propertynotify,
 	/* SelectionClear is generated when the window loses ownership of a
 	 * "selection". (Selections are the primary mechanism in X for
 	 * communication between X programs, which is needed for clipboard
@@ -193,18 +196,18 @@ static void (*handler[LASTEvent])(XEvent *) = {
 	 * locations! E.g., they could be running on different machines.) Uncomment
 	 * if you want the selection to disappear when you select something
 	 * different in another window. */
-	/* [SelectionClear] = selclear_, */
+	/* [SelectionClear] = selectionclear, */
 	/* SelectionRequest is generated when some window requests a selection that
 	 * our window owns. */
-	[SelectionRequest] = selrequest,
+	[SelectionRequest] = selectionrequest,
 	/* SelectionNotify is generated in the process of transfering a selection.
 	 * In particular, a selection owner sends a SelectionNotify to the
 	 * requestor after a successful transfer. */
-	[SelectionNotify] = selnotify,
+	[SelectionNotify] = selectionnotify,
 	/* ClientMessage events are never generated automatically by the X server;
 	 * they are for general client communication. We receive ClientMessage
 	 * events to implement XEmbed. */
-	[ClientMessage] = cmessage,
+	[ClientMessage] = clientmessage,
 };
 
 /* Globals */
@@ -244,165 +247,104 @@ static char ascii_printable[] =
 	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
 	"`abcdefghijklmnopqrstuvwxyz{|}~";
 
-void
-xclipcopy(void)
-{
-	Atom clipboard;
-
-	free(xsel.clipboard);
-	xsel.clipboard = NULL;
-
-	if (xsel.primary != NULL) {
-		xsel.clipboard = xstrdup(xsel.primary);
-		clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
-		XSetSelectionOwner(xw.dpy, clipboard, xw.win, CurrentTime);
-	}
-}
-
-void
-xclippaste(void)
-{
-	Atom clipboard;
-
-	clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
-	XConvertSelection(xw.dpy, clipboard, xsel.xtarget, clipboard,
-			xw.win, CurrentTime);
-}
-
-void
-xselpaste(void)
-{
-	XConvertSelection(xw.dpy, XA_PRIMARY, xsel.xtarget, XA_PRIMARY,
-			xw.win, CurrentTime);
-}
-
-void
-xzoomabs(double fontsize)
-{
-	xunloadfonts();
-	xloadfonts(usedfont, fontsize);
-	cresize(0, 0);
-	redraw();
-	xhints();
-}
-
-void
-xzoomrel(double delta)
-{
-	xzoomabs(usedfontsize+delta);
-}
-
-void
-xzoomrst(void)
-{
-	if (defaultfontsize > 0)
-		xzoomabs(defaultfontsize);
-}
-
 int
-evcol(XEvent *e)
+handlesym(KeySym sym, uint state)
 {
-	int x = e->xbutton.x - borderpx;
-	LIMIT(x, 0, win.tw - 1);
-	return x / win.cw;
-}
+	Key *k;
+	char buf[64]; /* big enough for CSI sequence */
+	size_t len;
 
-int
-evrow(XEvent *e)
-{
-	int y = e->xbutton.y - borderpx;
-	LIMIT(y, 0, win.th - 1);
-	return y / win.ch;
-}
-
-void
-mousesel(XEvent *e, int done)
-{
-	int type;
-	uint state;
-	SelType *st;
-
-	type = SEL_REGULAR;
-	state = confstate(e->xbutton.state, 0);
-	for (st = seltypes; st->type; st++) {
-		if (MATCH(state, st->set, st->clr)) {
-			type = st->type;
-			break;
+	/* 1. Custom handling from config */
+	for (k = keys; k->sym; k++) {
+		if (k->sym == sym && MATCH(state, k->set, k->clr)) {
+			k->fn(state, k->arg);
+			return 1;
 		}
 	}
 
-	selextend(evcol(e), evrow(e), type, done);
-	if (done)
-		setsel(seltext(), e->xbutton.time);
-}
-
-void
-mousereport(XEvent *e)
-{
-	int len, x = evcol(e), y = evrow(e),
-	    button = e->xbutton.button, state = e->xbutton.state;
-	char buf[40];
-	static int ox, oy;
-
-	/* from urxvt */
-	if (e->xbutton.type == MotionNotify) {
-		if (x == ox && y == oy)
-			return;
-		if (!IS_SET(MODE_MOUSEMOTION) && !IS_SET(MODE_MOUSEMANY))
-			return;
-		/* MOUSE_MOTION: no reporting if no button is pressed */
-		if (IS_SET(MODE_MOUSEMOTION) && oldbutton == 3)
-			return;
-
-		button = oldbutton + 32;
-		ox = x;
-		oy = y;
-	} else {
-		if (!IS_SET(MODE_MOUSESGR) && e->xbutton.type == ButtonRelease) {
-			button = 3;
+	/* 2. Printable ASCII (some special cases are handled in the keys table) */
+	if (0x20 <= sym && sym < 0x7f) {
+		/* CTRL + [ALT +] non-lowercase-letter must be encoded as CSI
+		 * XXX some of these should probably be mapped to C0 controls */
+		if ((state&CTRL) > 0 && !('a' <= sym && sym <= 'z')) {
+			len = csienc(buf, sizeof buf, state, sym, SHFT, 'u');
 		} else {
-			button -= Button1;
-			if (button >= 7)
-				button += 128 - 7;
-			else if (button >= 3)
-				button += 64 - 3;
+			buf[0] = sym;
+			len = 1;
+			/* CTRL + lowercase letter can usually be handled by translating to
+			 * the corresponding C0 control */
+			if ((state&CTRL) > 0)
+				buf[0] -= 0x60;
+			/* ALT can usually be handled by appending ESC */
+			if ((state&ALT) > 0) {
+				buf[1] = buf[0];
+				buf[0] = '\033';
+				len = 2;
+			}
 		}
-		if (e->xbutton.type == ButtonPress) {
-			oldbutton = button;
-			ox = x;
-			oy = y;
-		} else if (e->xbutton.type == ButtonRelease) {
-			oldbutton = 3;
-			/* MODE_MOUSEX10: no button release reporting */
-			if (IS_SET(MODE_MOUSEX10))
-				return;
-			if (button == 64 || button == 65)
-				return;
-		}
+		ttywrite(buf, len, 1);
+		return 1;
 	}
 
-	if (!IS_SET(MODE_MOUSEX10)) {
-		button += ((state & ShiftMask  ) ? 4  : 0)
-			+ ((state & Mod4Mask   ) ? 8  : 0)
-			+ ((state & ControlMask) ? 16 : 0);
-	}
-
-	if (IS_SET(MODE_MOUSESGR)) {
-		len = snprintf(buf, sizeof(buf), "\033[<%d;%d;%d%c",
-				button, x+1, y+1,
-				e->xbutton.type == ButtonRelease ? 'm' : 'M');
-	} else if (x < 223 && y < 223) {
-		len = snprintf(buf, sizeof(buf), "\033[M%c%c%c",
-				32+button, 32+x+1, 32+y+1);
-	} else {
-		return;
-	}
-
-	ttywrite(buf, len, 0);
+	return 0;
 }
 
+void
+keyaction(XKeyEvent *e, int release)
+{
+	uint state;
+	char buf[64]; /* big enough for CSI sequence */
+	size_t len;
+	KeySym sym;
+	Status status;
+	Rune c;
+
+	state = confstate(e->state, release);
+
+	sym = NoSymbol;
+	if (xw.ime.xic)
+		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &sym, &status);
+	else
+		len = XLookupString(e, buf, sizeof buf, &sym, NULL);
+
+	/* 1. Sym  */
+	if (sym != NoSymbol && handlesym(sym, state))
+		return;
+
+	if (len == 0)
+		return;
+
+	/* 2. Modified UTF8-encoded unicode */
+	if ((state&KMOD) > 0 && utf8dec(buf, &c, len) == len && c != UTF_INVALID)
+		len = csienc(buf, sizeof buf, state, c, SHFT, 'u');
+
+	/* 3. Default to directly sending composed string from the input method
+	 * (might not be UTF8; encoding is dependent on locale of input method) */
+
+	ttywrite(buf, len, 1);
+}
+
+void
+keypress(XEvent *e)
+{
+	if (IS_SET(MODE_KBDLOCK))
+		return;
+	keyaction(&e->xkey, 0);
+}
+
+void
+keyrelease(XEvent *e)
+{
+	if (IS_SET(MODE_KBDLOCK))
+		return;
+	keyaction(&e->xkey, 1);
+}
+
+/* TODO asymmetry between return values of keyaction and buttonaction.
+ * the selection handling in buttonpress and buttonrelease should be put into
+ * the general button event framework in config.c to fix this. */
 int
-baction(XButtonEvent *e, int release)
+buttonaction(XButtonEvent *e, int release)
 {
 	uint state;
 	Btn *b;
@@ -419,7 +361,7 @@ baction(XButtonEvent *e, int release)
 }
 
 void
-bpress(XEvent *e)
+buttonpress(XEvent *e)
 {
 	struct timespec now;
 	int snap;
@@ -429,7 +371,7 @@ bpress(XEvent *e)
 		return;
 	}
 
-	if (baction(&e->xbutton, 0))
+	if (buttonaction(&e->xbutton, 0))
 		return;
 
 	if (e->xbutton.button == Button1) {
@@ -446,7 +388,7 @@ bpress(XEvent *e)
 		xsel.tclick2 = xsel.tclick1;
 		xsel.tclick1 = now;
 
-		selstart(evcol(e), evrow(e), snap);
+		selstart(evtcol(e), evtrow(e), snap);
 	}
 }
 
@@ -458,28 +400,159 @@ brelease(XEvent *e)
 		return;
 	}
 
-	if (baction(&e->xbutton, 1))
+	if (buttonaction(&e->xbutton, 1))
 		return;
 	if (e->xbutton.button == Button1)
 		mousesel(e, 1);
 }
 
 void
-propnotify(XEvent *e)
+motionnotify(XEvent *e)
+{
+	if (IS_SET(MODE_MOUSE)) {
+		mousereport(e);
+		return;
+	}
+
+	mousesel(e, 0);
+}
+
+void
+focusin(XEvent *ev)
+{
+	XFocusChangeEvent *e = &ev->xfocus;
+
+	if (e->mode == NotifyGrab)
+		return;
+
+	if (xw.ime.xic)
+		XSetICFocus(xw.ime.xic);
+	win.mode |= MODE_FOCUSED;
+	xseturgency(0);
+	if (IS_SET(MODE_FOCUS))
+		ttywrite("\033[I", 3, 0);
+}
+
+void
+focusout(XEvent *ev)
+{
+	XFocusChangeEvent *e = &ev->xfocus;
+
+	if (e->mode == NotifyGrab)
+		return;
+
+	if (xw.ime.xic)
+		XUnsetICFocus(xw.ime.xic);
+	win.mode &= ~MODE_FOCUSED;
+	if (IS_SET(MODE_FOCUS))
+		ttywrite("\033[O", 3, 0);
+}
+
+void
+expose(XEvent *ev)
+{
+	redraw();
+}
+
+void
+visibilitynotify(XEvent *ev)
+{
+	XVisibilityEvent *e = &ev->xvisibility;
+
+	MODBIT(win.mode, e->state != VisibilityFullyObscured, MODE_VISIBLE);
+}
+
+void
+unmapnotify(XEvent *ev)
+{
+	win.mode &= ~MODE_VISIBLE;
+}
+
+void
+configurenotify(XEvent *e)
+{
+	if (e->xconfigure.width == win.w && e->xconfigure.height == win.h)
+		return;
+
+	cresize(e->xconfigure.width, e->xconfigure.height);
+}
+
+void
+propertynotify(XEvent *e)
 {
 	XPropertyEvent *xpev;
 	Atom clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
 
 	xpev = &e->xproperty;
 	if (xpev->state == PropertyNewValue &&
-			(xpev->atom == XA_PRIMARY ||
-			 xpev->atom == clipboard)) {
-		selnotify(e);
-	}
+			(xpev->atom == XA_PRIMARY || xpev->atom == clipboard))
+		selectionnotify(e);
 }
 
 void
-selnotify(XEvent *e)
+selectionclear(XEvent *e)
+{
+	selclear();
+}
+
+void
+selectionrequest(XEvent *e)
+{
+	XSelectionRequestEvent *xsre;
+	XSelectionEvent xev;
+	Atom xa_targets, string, clipboard;
+	char *seltext;
+
+	xsre = (XSelectionRequestEvent *) e;
+	xev.type = SelectionNotify;
+	xev.requestor = xsre->requestor;
+	xev.selection = xsre->selection;
+	xev.target = xsre->target;
+	xev.time = xsre->time;
+	if (xsre->property == None)
+		xsre->property = xsre->target;
+
+	/* reject */
+	xev.property = None;
+
+	xa_targets = XInternAtom(xw.dpy, "TARGETS", 0);
+	if (xsre->target == xa_targets) {
+		/* respond with the supported type */
+		string = xsel.xtarget;
+		XChangeProperty(xsre->display, xsre->requestor, xsre->property,
+				XA_ATOM, 32, PropModeReplace,
+				(uchar *) &string, 1);
+		xev.property = xsre->property;
+	} else if (xsre->target == xsel.xtarget || xsre->target == XA_STRING) {
+		/* xith XA_STRING non ascii characters may be incorrect in the
+		 * requestor. It is not our problem, use utf8. */
+		clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
+		if (xsre->selection == XA_PRIMARY) {
+			seltext = xsel.primary;
+		} else if (xsre->selection == clipboard) {
+			seltext = xsel.clipboard;
+		} else {
+			fprintf(stderr,
+					"unhandled clipboard selection 0x%lx\n",
+					xsre->selection);
+			return;
+		}
+		if (seltext != NULL) {
+			XChangeProperty(xsre->display, xsre->requestor,
+					xsre->property, xsre->target,
+					8, PropModeReplace,
+					(uchar *)seltext, strlen(seltext));
+			xev.property = xsre->property;
+		}
+	}
+
+	/* all done, send a notification to the listener */
+	if (!XSendEvent(xsre->display, xsre->requestor, 1, 0, (XEvent *) &xev))
+		fprintf(stderr, "error sending SelectionNotify event\n");
+}
+
+void
+selectionnotify(XEvent *e)
 {
 	ulong nitems, ofs, rem;
 	int format;
@@ -555,65 +628,178 @@ selnotify(XEvent *e)
 }
 
 void
-selclear_(XEvent *e)
+clientmessage(XEvent *e)
 {
-	selclear();
+	/* See xembed specs:
+	 * http://standards.freedesktop.org/xembed-spec/xembed-spec-latest.html */
+	if (e->xclient.message_type == xw.xembed && e->xclient.format == 32) {
+		if (e->xclient.data.l[1] == XEMBED_FOCUS_IN) {
+			win.mode |= MODE_FOCUSED;
+			xseturgency(0);
+		} else if (e->xclient.data.l[1] == XEMBED_FOCUS_OUT) {
+			win.mode &= ~MODE_FOCUSED;
+		}
+	} else if (e->xclient.data.l[0] == xw.wmdeletewin) {
+		ttyhangup();
+		exit(0);
+	}
 }
 
 void
-selrequest(XEvent *e)
+xclipcopy(void)
 {
-	XSelectionRequestEvent *xsre;
-	XSelectionEvent xev;
-	Atom xa_targets, string, clipboard;
-	char *seltext;
+	Atom clipboard;
 
-	xsre = (XSelectionRequestEvent *) e;
-	xev.type = SelectionNotify;
-	xev.requestor = xsre->requestor;
-	xev.selection = xsre->selection;
-	xev.target = xsre->target;
-	xev.time = xsre->time;
-	if (xsre->property == None)
-		xsre->property = xsre->target;
+	free(xsel.clipboard);
+	xsel.clipboard = NULL;
 
-	/* reject */
-	xev.property = None;
-
-	xa_targets = XInternAtom(xw.dpy, "TARGETS", 0);
-	if (xsre->target == xa_targets) {
-		/* respond with the supported type */
-		string = xsel.xtarget;
-		XChangeProperty(xsre->display, xsre->requestor, xsre->property,
-				XA_ATOM, 32, PropModeReplace,
-				(uchar *) &string, 1);
-		xev.property = xsre->property;
-	} else if (xsre->target == xsel.xtarget || xsre->target == XA_STRING) {
-		/* xith XA_STRING non ascii characters may be incorrect in the
-		 * requestor. It is not our problem, use utf8. */
+	if (xsel.primary != NULL) {
+		xsel.clipboard = xstrdup(xsel.primary);
 		clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
-		if (xsre->selection == XA_PRIMARY) {
-			seltext = xsel.primary;
-		} else if (xsre->selection == clipboard) {
-			seltext = xsel.clipboard;
-		} else {
-			fprintf(stderr,
-					"unhandled clipboard selection 0x%lx\n",
-					xsre->selection);
-			return;
-		}
-		if (seltext != NULL) {
-			XChangeProperty(xsre->display, xsre->requestor,
-					xsre->property, xsre->target,
-					8, PropModeReplace,
-					(uchar *)seltext, strlen(seltext));
-			xev.property = xsre->property;
+		XSetSelectionOwner(xw.dpy, clipboard, xw.win, CurrentTime);
+	}
+}
+
+void
+xclippaste(void)
+{
+	Atom clipboard;
+
+	clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
+	XConvertSelection(xw.dpy, clipboard, xsel.xtarget, clipboard,
+			xw.win, CurrentTime);
+}
+
+void
+xselpaste(void)
+{
+	XConvertSelection(xw.dpy, XA_PRIMARY, xsel.xtarget, XA_PRIMARY,
+			xw.win, CurrentTime);
+}
+
+void
+xzoomabs(double fontsize)
+{
+	xunloadfonts();
+	xloadfonts(usedfont, fontsize);
+	cresize(0, 0);
+	redraw();
+	xhints();
+}
+
+void
+xzoomrel(double delta)
+{
+	xzoomabs(usedfontsize+delta);
+}
+
+void
+xzoomrst(void)
+{
+	if (defaultfontsize > 0)
+		xzoomabs(defaultfontsize);
+}
+
+int
+evtcol(XEvent *e)
+{
+	int x = e->xbutton.x - borderpx;
+	LIMIT(x, 0, win.tw - 1);
+	return x / win.cw;
+}
+
+int
+evtrow(XEvent *e)
+{
+	int y = e->xbutton.y - borderpx;
+	LIMIT(y, 0, win.th - 1);
+	return y / win.ch;
+}
+
+void
+mousesel(XEvent *e, int done)
+{
+	int type;
+	uint state;
+	SelType *st;
+
+	type = SEL_REGULAR;
+	state = confstate(e->xbutton.state, 0);
+	for (st = seltypes; st->type; st++) {
+		if (MATCH(state, st->set, st->clr)) {
+			type = st->type;
+			break;
 		}
 	}
 
-	/* all done, send a notification to the listener */
-	if (!XSendEvent(xsre->display, xsre->requestor, 1, 0, (XEvent *) &xev))
-		fprintf(stderr, "error sending SelectionNotify event\n");
+	selextend(evtcol(e), evtrow(e), type, done);
+	if (done)
+		setsel(seltext(), e->xbutton.time);
+}
+
+void
+mousereport(XEvent *e)
+{
+	int len, x = evtcol(e), y = evtrow(e),
+	    button = e->xbutton.button, state = e->xbutton.state;
+	char buf[40];
+	static int ox, oy;
+
+	/* from urxvt */
+	if (e->xbutton.type == MotionNotify) {
+		if (x == ox && y == oy)
+			return;
+		if (!IS_SET(MODE_MOUSEMOTION) && !IS_SET(MODE_MOUSEMANY))
+			return;
+		/* MOUSE_MOTION: no reporting if no button is pressed */
+		if (IS_SET(MODE_MOUSEMOTION) && oldbutton == 3)
+			return;
+
+		button = oldbutton + 32;
+		ox = x;
+		oy = y;
+	} else {
+		if (!IS_SET(MODE_MOUSESGR) && e->xbutton.type == ButtonRelease) {
+			button = 3;
+		} else {
+			button -= Button1;
+			if (button >= 7)
+				button += 128 - 7;
+			else if (button >= 3)
+				button += 64 - 3;
+		}
+		if (e->xbutton.type == ButtonPress) {
+			oldbutton = button;
+			ox = x;
+			oy = y;
+		} else if (e->xbutton.type == ButtonRelease) {
+			oldbutton = 3;
+			/* MODE_MOUSEX10: no button release reporting */
+			if (IS_SET(MODE_MOUSEX10))
+				return;
+			if (button == 64 || button == 65)
+				return;
+		}
+	}
+
+	if (!IS_SET(MODE_MOUSEX10)) {
+		button += ((state & ShiftMask  ) ? 4  : 0)
+			+ ((state & Mod4Mask   ) ? 8  : 0)
+			+ ((state & ControlMask) ? 16 : 0);
+	}
+
+	if (IS_SET(MODE_MOUSESGR)) {
+		len = snprintf(buf, sizeof(buf), "\033[<%d;%d;%d%c",
+				button, x+1, y+1,
+				e->xbutton.type == ButtonRelease ? 'm' : 'M');
+	} else if (x < 223 && y < 223) {
+		len = snprintf(buf, sizeof(buf), "\033[M%c%c%c",
+				32+button, 32+x+1, 32+y+1);
+	} else {
+		return;
+	}
+
+	ttywrite(buf, len, 0);
 }
 
 void
@@ -634,17 +820,6 @@ void
 xsetsel(char *str)
 {
 	setsel(str, CurrentTime);
-}
-
-void
-bmotion(XEvent *e)
-{
-	if (IS_SET(MODE_MOUSE)) {
-		mousereport(e);
-		return;
-	}
-
-	mousesel(e, 0);
 }
 
 void
@@ -1600,26 +1775,6 @@ xximspot(int x, int y)
 }
 
 void
-expose(XEvent *ev)
-{
-	redraw();
-}
-
-void
-visibility(XEvent *ev)
-{
-	XVisibilityEvent *e = &ev->xvisibility;
-
-	MODBIT(win.mode, e->state != VisibilityFullyObscured, MODE_VISIBLE);
-}
-
-void
-unmap(XEvent *ev)
-{
-	win.mode &= ~MODE_VISIBLE;
-}
-
-void
 xsetpointermotion(int set)
 {
 	MODBIT(xw.attrs.event_mask, set, PointerMotionMask);
@@ -1670,150 +1825,7 @@ xbell(void)
 		XkbBell(xw.dpy, xw.win, bellvolume, (Atom)NULL);
 }
 
-void
-focus(XEvent *ev)
-{
-	XFocusChangeEvent *e = &ev->xfocus;
-
-	if (e->mode == NotifyGrab)
-		return;
-
-	if (ev->type == FocusIn) {
-		if (xw.ime.xic)
-			XSetICFocus(xw.ime.xic);
-		win.mode |= MODE_FOCUSED;
-		xseturgency(0);
-		if (IS_SET(MODE_FOCUS))
-			ttywrite("\033[I", 3, 0);
-	} else {
-		if (xw.ime.xic)
-			XUnsetICFocus(xw.ime.xic);
-		win.mode &= ~MODE_FOCUSED;
-		if (IS_SET(MODE_FOCUS))
-			ttywrite("\033[O", 3, 0);
-	}
-}
-
 int
-handlesym(KeySym sym, uint state)
-{
-	Key *k;
-	char buf[64]; /* big enough for CSI sequence */
-	size_t len;
-
-	/* 1. Custom handling from config */
-	for (k = keys; k->sym; k++) {
-		if (k->sym == sym && MATCH(state, k->set, k->clr)) {
-			k->fn(state, k->arg);
-			return 1;
-		}
-	}
-
-	/* 2. Printable ASCII (some special cases are handled in the keys table) */
-	if (0x20 <= sym && sym < 0x7f) {
-		/* CTRL + [ALT +] non-lowercase-letter must be encoded as CSI
-		 * XXX some of these should probably be mapped to C0 controls */
-		if ((state&CTRL) > 0 && !('a' <= sym && sym <= 'z')) {
-			len = csienc(buf, sizeof buf, state, sym, SHFT, 'u');
-		} else {
-			buf[0] = sym;
-			len = 1;
-			/* CTRL + lowercase letter can usually be handled by translating to
-			 * the corresponding C0 control */
-			if ((state&CTRL) > 0)
-				buf[0] -= 0x60;
-			/* ALT can usually be handled by appending ESC */
-			if ((state&ALT) > 0) {
-				buf[1] = buf[0];
-				buf[0] = '\033';
-				len = 2;
-			}
-		}
-		ttywrite(buf, len, 1);
-		return 1;
-	}
-
-	return 0;
-}
-
-void
-kaction(XKeyEvent *e, int release)
-{
-	uint state;
-	char buf[64]; /* big enough for CSI sequence */
-	size_t len;
-	KeySym sym;
-	Status status;
-	Rune c;
-
-	state = confstate(e->state, release);
-
-	sym = NoSymbol;
-	if (xw.ime.xic)
-		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &sym, &status);
-	else
-		len = XLookupString(e, buf, sizeof buf, &sym, NULL);
-
-	/* 1. Sym  */
-	if (sym != NoSymbol && handlesym(sym, state))
-		return;
-
-	if (len == 0)
-		return;
-
-	/* 2. Modified UTF8-encoded unicode */
-	if ((state&KMOD) > 0 && utf8dec(buf, &c, len) == len && c != UTF_INVALID)
-		len = csienc(buf, sizeof buf, state, c, SHFT, 'u');
-
-	/* 3. Default to directly sending composed string from the input method
-	 * (might not be UTF8; encoding is dependent on locale of input method) */
-
-	ttywrite(buf, len, 1);
-}
-
-void
-kpress(XEvent *e)
-{
-	if (IS_SET(MODE_KBDLOCK))
-		return;
-	kaction(&e->xkey, 0);
-}
-
-void
-krelease(XEvent *e)
-{
-	if (IS_SET(MODE_KBDLOCK))
-		return;
-	kaction(&e->xkey, 1);
-}
-
-void
-cmessage(XEvent *e)
-{
-	/* See xembed specs:
-	 * http://standards.freedesktop.org/xembed-spec/xembed-spec-latest.html */
-	if (e->xclient.message_type == xw.xembed && e->xclient.format == 32) {
-		if (e->xclient.data.l[1] == XEMBED_FOCUS_IN) {
-			win.mode |= MODE_FOCUSED;
-			xseturgency(0);
-		} else if (e->xclient.data.l[1] == XEMBED_FOCUS_OUT) {
-			win.mode &= ~MODE_FOCUSED;
-		}
-	} else if (e->xclient.data.l[0] == xw.wmdeletewin) {
-		ttyhangup();
-		exit(0);
-	}
-}
-
-void
-resize(XEvent *e)
-{
-	if (e->xconfigure.width == win.w && e->xconfigure.height == win.h)
-		return;
-
-	cresize(e->xconfigure.width, e->xconfigure.height);
-}
-
 void
 xmain(void)
 {
