@@ -120,49 +120,91 @@ static void xseturgency(int);
 static int evcol(XEvent *);
 static int evrow(XEvent *);
 
+/* X event handlers */
+/* TODO: make names more uniform */
+static void kpress(XEvent *);
+static void krelease(XEvent *);
+static void bpress(XEvent *);
+static void brelease(XEvent *);
+static void bmotion(XEvent *);
+static void focus(XEvent *);
 static void expose(XEvent *);
 static void visibility(XEvent *);
 static void unmap(XEvent *);
-static int handlesym(KeySym, uint);
-static void kaction(XKeyEvent *, int);
-static void kpress(XEvent *);
-static void krelease(XEvent *);
-static void cmessage(XEvent *);
 static void resize(XEvent *);
-static void focus(XEvent *);
-static int baction(XButtonEvent *, int);
-static void brelease(XEvent *);
-static void bpress(XEvent *);
-static void bmotion(XEvent *);
 static void propnotify(XEvent *);
-static void selnotify(XEvent *);
 static void selclear_(XEvent *);
 static void selrequest(XEvent *);
+static void selnotify(XEvent *);
+static void cmessage(XEvent *);
+
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
 static void mousereport(XEvent *);
+static int handlesym(KeySym, uint);
+static void kaction(XKeyEvent *, int);
+static int baction(XButtonEvent *, int);
 
+/* When adding a new event type to this table, the event_mask window attribute
+ * in xinit needs to be updated with the appropriate mask bit(s). */
 static void (*handler[LASTEvent])(XEvent *) = {
+	/* KeyPress (resp., KeyRelease) is generated when a keyboard key is pressed
+	 * (resp., released). */
 	[KeyPress] = kpress,
 	[KeyRelease] = krelease,
-	[ClientMessage] = cmessage,
-	[ConfigureNotify] = resize,
-	[VisibilityNotify] = visibility,
-	[UnmapNotify] = unmap,
-	[Expose] = expose,
-	[FocusIn] = focus,
-	[FocusOut] = focus,
-	[MotionNotify] = bmotion,
+	/* ButtonPress (resp., ButtonRelease) is generated when a mouse button is
+	 * pressed (resp., released). */
 	[ButtonPress] = bpress,
 	[ButtonRelease] = brelease,
-/* Uncomment if you want the selection to disappear when you select something
- * different in another window. */
-/*	[SelectionClear] = selclear_, */
-	[SelectionNotify] = selnotify,
-	/* PropertyNotify is only turned on when there is some INCR transfer
-	 * happening for the selection retrieval. */
+	/* MotionNotify is generated when the mouse cursor moves. We only receive
+	 * this event when a mouse button is held down, and this event is used to
+	 * implement text selections. */
+	[MotionNotify] = bmotion,
+	/* FocusIn (resp., FocusOut) is generated when the window acquires (resp.,
+	 * loses) keyboard focus. (Only one window is said to have keyboard focus;
+	 * this is the window that keyboard events are sent to.) */
+	[FocusIn] = focus,
+	[FocusOut] = focus,
+	/* Expose is generated when part of the window has been exposed, indicating
+	 * that part of the window needs to be redrawn. */
+	[Expose] = expose,
+	/* VisibilityNotify is generated when visibility of window changes between
+	 * VisibilityUnobscured, VisibilityPartiallyObscured, and
+	 * VisibilityFullyObscured (which mean what you think). */
+	[VisibilityNotify] = visibility,
+	/* UnmapNotify is generated when the window is "unmapped" from a screen,
+	 * which in particular indicates that it is no longer visible. */
+	[UnmapNotify] = unmap,
+	/* ConfigureNotify is generated when various changes to the window's state,
+	 * like its size, occur. */
+	[ConfigureNotify] = resize,
+	/* PropertyNotify is generated when a window "property" is modified.
+	 * (Properties are a general way to communicate information between
+	 * applications.) We only reveive PropertyNotify events when there is some
+	 * INCR transfer happening for the selection retrieval. (An INCR transfer
+	 * is an incremental data transfer; these are used for large payloads.) */
 	[PropertyNotify] = propnotify,
+	/* SelectionClear is generated when the window loses ownership of a
+	 * "selection". (Selections are the primary mechanism in X for
+	 * communication between X programs, which is needed for clipboard
+	 * management, for instance. Note that external means of communication,
+	 * like files or TCP/IP, do not generally suffice for communication between
+	 * two X clients, since the clients do not generally know their relative
+	 * locations! E.g., they could be running on different machines.) Uncomment
+	 * if you want the selection to disappear when you select something
+	 * different in another window. */
+	/* [SelectionClear] = selclear_, */
+	/* SelectionRequest is generated when some window requests a selection that
+	 * our window owns. */
 	[SelectionRequest] = selrequest,
+	/* SelectionNotify is generated in the process of transfering a selection.
+	 * In particular, a selection owner sends a SelectionNotify to the
+	 * requestor after a successful transfer. */
+	[SelectionNotify] = selnotify,
+	/* ClientMessage events are never generated automatically by the X server;
+	 * they are for general client communication. We receive ClientMessage
+	 * events to implement XEmbed. */
+	[ClientMessage] = cmessage,
 };
 
 /* Globals */
