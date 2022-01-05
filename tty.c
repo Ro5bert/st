@@ -1246,11 +1246,20 @@ tsetmode(int priv, int set, const int *args, int narg)
 {
 	int alt; const int *lim;
 
+	/* For a nice list of these DECSET/DECRST control sequences (and other
+	 * control sequences), see
+	 * https://invisible-island.net/xterm/ctlseqs/ctlseqs.html */
 	for (lim = args + narg; args < lim; ++args) {
 		if (priv) {
 			switch (*args) {
+			case 0: /* Error (IGNORED) */
+				break;
 			case 1: /* DECCKM -- Cursor key */
 				xsetmode(set, MODE_APPCURSOR);
+				break;
+			case 2: /* DECANM -- ANSI/VT52 (IGNORED) */
+			case 3: /* DECCOLM -- Column (IGNORED) */
+			case 4: /* DECSCLM -- Scroll (IGNORED) */
 				break;
 			case 5: /* DECSCNM -- Reverse video */
 				xsetmode(set, MODE_REVERSE);
@@ -1262,47 +1271,53 @@ tsetmode(int priv, int set, const int *args, int narg)
 			case 7: /* DECAWM -- Auto wrap */
 				MODBIT(term.mode, set, MODE_WRAP);
 				break;
-			case 0:  /* Error (IGNORED) */
-			case 2:  /* DECANM -- ANSI/VT52 (IGNORED) */
-			case 3:  /* DECCOLM -- Column  (IGNORED) */
-			case 4:  /* DECSCLM -- Scroll (IGNORED) */
-			case 8:  /* DECARM -- Auto repeat (IGNORED) */
-			case 18: /* DECPFF -- Printer feed (IGNORED) */
-			case 19: /* DECPEX -- Printer extent (IGNORED) */
-			case 42: /* DECNRCM -- National characters (IGNORED) */
-			case 12: /* att610 -- Start blinking cursor (IGNORED) */
+			case 8: /* DECARM -- Auto repeat (IGNORED) */
 				break;
-			case 25: /* DECTCEM -- Text Cursor Enable Mode */
-				xsetmode(!set, MODE_HIDE);
-				break;
-			case 9:    /* X10 mouse compatibility mode */
+			case 9: /* X10 mouse compatibility mode */
 				xsetpointermotion(0);
 				xsetmode(0, MODE_MOUSE);
 				xsetmode(set, MODE_MOUSEX10);
 				break;
-			case 1000: /* 1000: report button press */
+			case 12: /* att610 -- Start blinking cursor (IGNORED) */
+			case 18: /* DECPFF -- Printer feed (IGNORED) */
+			case 19: /* DECPEX -- Printer extent (IGNORED) */
+				break;
+			case 25: /* DECTCEM -- Text Cursor Enable Mode */
+				xsetmode(!set, MODE_HIDE);
+				break;
+			case 42: /* DECNRCM -- National characters (IGNORED) */
+				break;
+			case 1000: /* report button press and release */
 				xsetpointermotion(0);
 				xsetmode(0, MODE_MOUSE);
 				xsetmode(set, MODE_MOUSEBTN);
 				break;
-			case 1002: /* 1002: report motion on button press */
+			case 1001: /* mouse highlight mode; can hang the
+			              terminal by design when implemented. */
+				break;
+			case 1002: /* report motion on button press */
 				xsetpointermotion(0);
 				xsetmode(0, MODE_MOUSE);
 				xsetmode(set, MODE_MOUSEMOTION);
 				break;
-			case 1003: /* 1003: enable all mouse motions */
+			case 1003: /* enable all mouse motions */
 				xsetpointermotion(set);
 				xsetmode(0, MODE_MOUSE);
 				xsetmode(set, MODE_MOUSEMANY);
 				break;
-			case 1004: /* 1004: send focus events to tty */
+			case 1004: /* send focus events to tty */
 				xsetmode(set, MODE_FOCUS);
 				break;
-			case 1006: /* 1006: extended reporting mode */
+			case 1005: /* UTF-8 mouse mode; will confuse applications not
+			              supporting UTF-8 and luit. */
+				break;
+			case 1006: /* extended reporting mode */
 				xsetmode(set, MODE_MOUSESGR);
 				break;
-			case 1034: /* 1034: encode meta modifier by setting 8th bit */
-				/* Not relevant with libtermkey. */
+			case 1015: /* urxvt mangled mouse mode; incompatible and can be
+			              mistaken for other control codes. */
+			case 1034: /* meta mode (encode meta modifier by setting 8th bit);
+			              not relevant with libtermkey encodings. */
 				break;
 			case 1049: /* swap screen & set/restore cursor as xterm */
 				if (!allowaltscreen)
@@ -1327,17 +1342,9 @@ tsetmode(int priv, int set, const int *args, int narg)
 			case 2004: /* 2004: bracketed paste mode */
 				xsetmode(set, MODE_BRCKTPASTE);
 				break;
-			/* Not implemented mouse modes. See comments there. */
-			case 1001: /* mouse highlight mode; can hang the
-				      terminal by design when implemented. */
-			case 1005: /* UTF-8 mouse mode; will confuse
-				      applications not supporting UTF-8
-				      and luit. */
-			case 1015: /* urxvt mangled mouse mode; incompatible
-				      and can be mistaken for other control
-				      codes. */
-				break;
 			default:
+				/* TODO: why the "erresc" prefix? looks like it was
+				 * previously a function. let's just remove it. */
 				fprintf(stderr,
 						"erresc: unknown private set/reset mode %d\n",
 						*args);
