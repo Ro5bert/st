@@ -1301,8 +1301,8 @@ tsetmode(int priv, int set, const int *args, int narg)
 			case 1006: /* 1006: extended reporting mode */
 				xsetmode(set, MODE_MOUSESGR);
 				break;
-			case 1034:
-				xsetmode(set, MODE_8BIT);
+			case 1034: /* 1034: encode meta modifier by setting 8th bit */
+				/* Not relevant with libtermkey. */
 				break;
 			case 1049: /* swap screen & set/restore cursor as xterm */
 				if (!allowaltscreen)

@@ -1,6 +1,12 @@
 /* See LICENSE for license details. */
 /* Requires: stdint.h, size_t */
 
+/* TODO: replace all ints used as bools with bool from stdbool. Looking in git
+ * history, st used to use bools, but someone replaced all of them with ints
+ * without real justification. The benefit in code clearity with bools instead
+ * of ints is significant. */
+/* TODO unicode input with C-S-u */
+
 
 #define UTF_INVALID 0xFFFD
 #define UTF_SIZ     4
@@ -81,7 +87,6 @@ enum win_mode {
 	MODE_HIDE        = 1 << 7,
 	MODE_APPCURSOR   = 1 << 8,
 	MODE_MOUSESGR    = 1 << 9,
-	MODE_8BIT        = 1 << 10,
 	MODE_BLINK       = 1 << 11,
 	MODE_FBLINK      = 1 << 12,
 	MODE_FOCUS       = 1 << 13,
