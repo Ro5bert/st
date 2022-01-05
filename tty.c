@@ -92,9 +92,13 @@ typedef struct {
 } TCursor;
 
 typedef struct {
-	int mode;
-	int type;
+	int active; /* Is the user currently selecting text? */
+	int emtpy;  /* Is anything highlighted? */
+	int type;   /* regular vs rectangular */
 	int snap;
+	int alt; /* TODO: why is this needed? why not just selclear in tswapscreen?
+	            with this, the selection is preserved across two tswapscreens,
+	            but is that really desired? */
 	/* Selection variables:
 	 * nb – normalized coordinates of the beginning of the selection
 	 * ne – normalized coordinates of the end of the selection
@@ -103,8 +107,6 @@ typedef struct {
 	struct {
 		int x, y;
 	} nb, ne, ob, oe;
-
-	int alt;
 } Selection;
 
 /* Internal representation of the screen */
@@ -215,18 +217,18 @@ static pid_t pid;
 void
 selinit(void)
 {
-	sel.mode = SEL_IDLE;
-	sel.snap = 0;
-	sel.ob.x = -1;
+	sel.active = 0;
+	sel.empty = 1;
+	sel.alt = 0;
 }
 
 void
 selclear(void)
 {
-	if (sel.ob.x == -1)
+	if (sel.empty)
 		return;
-	sel.mode = SEL_IDLE;
-	sel.ob.x = -1;
+	sel.active = 0;
+	sel.empty = 1;
 	tsetdirt(sel.nb.y, sel.ne.y);
 }
 
@@ -234,16 +236,16 @@ void
 selstart(int col, int row, int snap)
 {
 	selclear();
-	sel.mode = SEL_EMPTY;
+	sel.active = 1;
+	/* Word and line snap highlight stuff immediately, whereas char snap waits
+	 * until the mouse moves. */
+	sel.empty = snap == SEL_SNAP_CHAR;
 	sel.type = SEL_REGULAR;
-	sel.alt = IS_SET(MODE_ALTSCREEN);
 	sel.snap = snap;
+	sel.alt = IS_SET(MODE_ALTSCREEN);
 	sel.oe.x = sel.ob.x = col;
 	sel.oe.y = sel.ob.y = row;
 	selnormalize();
-
-	if (sel.snap != 0)
-		sel.mode = SEL_READY;
 	tsetdirt(sel.nb.y, sel.ne.y);
 }
 
@@ -252,9 +254,9 @@ selextend(int col, int row, int type, int done)
 {
 	int oldey, oldex, oldsby, oldsey, oldtype;
 
-	if (sel.mode == SEL_IDLE)
+	if (!sel.active)
 		return;
-	if (done && sel.mode == SEL_EMPTY) {
+	if (done && sel.empty) {
 		selclear();
 		return;
 	}
@@ -270,18 +272,18 @@ selextend(int col, int row, int type, int done)
 	selnormalize();
 	sel.type = type;
 
-	if (oldey != sel.oe.y || oldex != sel.oe.x || oldtype != sel.type
-			|| sel.mode == SEL_EMPTY)
+	if (oldey != sel.oe.y || oldex != sel.oe.x
+			|| oldtype != sel.type || sel.empty)
 		tsetdirt(MIN(sel.nb.y, oldsby), MAX(sel.ne.y, oldsey));
 
-	sel.mode = done ? SEL_IDLE : SEL_READY;
+	sel.active = !done;
+	sel.empty = 0;
 }
 
 int
 selcontains(int x, int y)
 {
-	if (sel.mode == SEL_EMPTY || sel.ob.x == -1
-			|| sel.alt != IS_SET(MODE_ALTSCREEN))
+	if (sel.empty || sel.alt != IS_SET(MODE_ALTSCREEN))
 		return 0;
 
 	if (sel.type == SEL_RECTANGULAR)
@@ -300,7 +302,7 @@ seltext(void)
 	int y, bufsize, lastx, linelen;
 	const Glyph *gp, *last;
 
-	if (sel.ob.x == -1)
+	if (sel.empty)
 		return NULL;
 
 	bufsize = (term.col+1) * (sel.ne.y-sel.nb.y+1) * UTF_SIZ;
@@ -440,7 +442,7 @@ selsnap(int *x, int *y, int direction)
 void
 selscroll(int orig, int n)
 {
-	if (sel.ob.x == -1)
+	if (sel.empty)
 		return;
 
 	if (BETWEEN(sel.nb.y, orig, term.bot) != BETWEEN(sel.ne.y, orig, term.bot)) {

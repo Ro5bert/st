@@ -6,6 +6,8 @@
  * without real justification. The benefit in code clearity with bools instead
  * of ints is significant. */
 /* TODO unicode input with C-S-u */
+/* TODO write/find a script to test control sequences */
+/* TODO test alignment by changing tab size and checking nothing is fucked */
 
 
 #define UTF_INVALID 0xFFFD
@@ -50,18 +52,13 @@ enum glyph_attribute {
 	ATTR_BOLD_FAINT = ATTR_BOLD | ATTR_FAINT,
 };
 
-enum selection_mode {
-	SEL_IDLE = 0,
-	SEL_EMPTY = 1,
-	SEL_READY = 2,
-};
-
 enum selection_type {
 	SEL_REGULAR = 1,
 	SEL_RECTANGULAR = 2,
 };
 
 enum selection_snap {
+	SEL_SNAP_CHAR = 0,
 	SEL_SNAP_WORD = 1,
 	SEL_SNAP_LINE = 2,
 };
@@ -130,7 +127,7 @@ size_t csienc(char *, size_t, uint, uint, uint, char);
 
 
 /* tty.c */
-void selinit(void);
+void selinit(void); /* TODO needn't be in here */
 void selclear(void);
 void selstart(int, int, int);
 void selextend(int, int, int, int);
