@@ -1248,6 +1248,8 @@ tsetmode(int priv, int set, const int *args, int narg)
 {
 	int alt; const int *lim;
 
+	set = !!set;
+
 	/* For a nice list of these DECSET/DECRST control sequences (and other
 	 * control sequences), see
 	 * https://invisible-island.net/xterm/ctlseqs/ctlseqs.html */
@@ -1257,14 +1259,15 @@ tsetmode(int priv, int set, const int *args, int narg)
 			case 0: /* Error (IGNORED) */
 				break;
 			case 1: /* DECCKM -- Cursor key */
-				xsetmode(set, MODE_APPCURSOR);
+				win.appcursor = set;
 				break;
 			case 2: /* DECANM -- ANSI/VT52 (IGNORED) */
 			case 3: /* DECCOLM -- Column (IGNORED) */
 			case 4: /* DECSCLM -- Scroll (IGNORED) */
 				break;
 			case 5: /* DECSCNM -- Reverse video */
-				xsetmode(set, MODE_REVERSE);
+				win.reversevid = set;
+				redraw();
 				break;
 			case 6: /* DECOM -- Origin */
 				MODBIT(term.c.state, set, CURSOR_ORIGIN);
@@ -1277,44 +1280,40 @@ tsetmode(int priv, int set, const int *args, int narg)
 				break;
 			case 9: /* X10 mouse compatibility mode */
 				xsetpointermotion(0);
-				xsetmode(0, MODE_MOUSE);
-				xsetmode(set, MODE_MOUSEX10);
+				win.mousemode = set ? MOUSE_X10 : MOUSE_NONE;
 				break;
 			case 12: /* att610 -- Start blinking cursor (IGNORED) */
 			case 18: /* DECPFF -- Printer feed (IGNORED) */
 			case 19: /* DECPEX -- Printer extent (IGNORED) */
 				break;
 			case 25: /* DECTCEM -- Text Cursor Enable Mode */
-				xsetmode(!set, MODE_HIDE);
+				win.hidecursor = !set;
 				break;
 			case 42: /* DECNRCM -- National characters (IGNORED) */
 				break;
 			case 1000: /* report button press and release */
 				xsetpointermotion(0);
-				xsetmode(0, MODE_MOUSE);
-				xsetmode(set, MODE_MOUSEBTN);
+				win.mousemode = set ? MOUSE_BUTTON : MOUSE_NONE;
 				break;
 			case 1001: /* mouse highlight mode; can hang the
 			              terminal by design when implemented. */
 				break;
 			case 1002: /* report motion on button press */
 				xsetpointermotion(0);
-				xsetmode(0, MODE_MOUSE);
-				xsetmode(set, MODE_MOUSEMOTION);
+				win.mousemode = set ? MOUSE_MOTION : NOUSE_NONE;
 				break;
 			case 1003: /* enable all mouse motions */
 				xsetpointermotion(set);
-				xsetmode(0, MODE_MOUSE);
-				xsetmode(set, MODE_MOUSEMANY);
+				win.mousemode = set ? MOUSE_MANY : MOUSE_NONE;
 				break;
 			case 1004: /* send focus events to tty */
-				xsetmode(set, MODE_FOCUS);
+				win.reportfocus = set;
 				break;
 			case 1005: /* UTF-8 mouse mode; will confuse applications not
 			              supporting UTF-8 and luit. */
 				break;
 			case 1006: /* extended reporting mode */
-				xsetmode(set, MODE_MOUSESGR);
+				win.mousesgr = set;
 				break;
 			case 1015: /* urxvt mangled mouse mode; incompatible and can be
 			              mistaken for other control codes. */
@@ -1342,7 +1341,7 @@ tsetmode(int priv, int set, const int *args, int narg)
 				tcursor((set) ? CURSOR_SAVE : CURSOR_LOAD);
 				break;
 			case 2004: /* 2004: bracketed paste mode */
-				xsetmode(set, MODE_BRCKTPASTE);
+				win.bracketpaste = set;
 				break;
 			default:
 				/* TODO: why the "erresc" prefix? looks like it was
@@ -1357,7 +1356,7 @@ tsetmode(int priv, int set, const int *args, int narg)
 			case 0:  /* Error (IGNORED) */
 				break;
 			case 2:
-				xsetmode(set, MODE_KBDLOCK);
+				win.kbdlock = set;
 				break;
 			case 4:  /* IRM -- Insertion-replacement */
 				MODBIT(term.mode, set, MODE_INSERT);
@@ -2032,10 +2031,10 @@ eschandle(uchar ascii)
 		xloadcolors();
 		break;
 	case '=': /* DECPAM -- Application keypad */
-		xsetmode(1, MODE_APPKEYPAD);
+		win.appkeypad = 1;
 		break;
 	case '>': /* DECPNM -- Normal keypad */
-		xsetmode(0, MODE_APPKEYPAD);
+		win.appkeypad = 0;
 		break;
 	case '7': /* DECSC -- Save Cursor */
 		tcursor(CURSOR_SAVE);

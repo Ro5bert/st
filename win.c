@@ -29,19 +29,10 @@
 #define TRUEGREEN(x) (((x) & 0xff00))
 #define TRUEBLUE(x)  (((x) & 0xff) << 8)
 
+/* TODO: not sure I like these. Xft prefix makes it clear where it comes from */
 typedef XftDraw *Draw;
 typedef XftColor Color;
-typedef XftGlyphFontSpec GlyphFontSpec;
-
-/* Purely graphic info */
-typedef struct {
-	int tw, th; /* tty width and height */
-	int w, h; /* window width and height */
-	int ch; /* char height */
-	int cw; /* char width  */
-	uint mode; /* window state/mode flags */
-	int cursor; /* cursor style */
-} TermWindow;
+typedef XftGlyphFontSpec GlyphFontSpec; /* TODO: not used everywhere */
 
 typedef struct {
 	Display *dpy;
@@ -58,7 +49,7 @@ typedef struct {
 	} ime;
 	Draw draw;
 	Visual *vis;
-	XSetWindowAttributes attrs;
+	XSetWindowAttributes attrs; /* TODO do we really need to save this? i think not */
 	int scr;
 	int isfixed; /* is fixed geometry? */
 	int l, t; /* left and top offset */
@@ -96,6 +87,8 @@ typedef struct {
 	GC gc;
 } DC;
 
+/* TODO: separate functions that draw selection from those that inform X of
+ * selected text */
 static inline int glyphattrcmp(Glyph, Glyph);
 static inline ushort sixd_to_16bit(int);
 static int xmakeglyphfontspecs(XftGlyphFontSpec *, const Glyph *, int, int, int);
@@ -214,14 +207,18 @@ static void (*handler[LASTEvent])(XEvent *) = {
 static DC dc;
 static XWindow xw;
 static XSelection xsel;
-static TermWindow win;
+/* TODO why does this get to be called win, while the XWindow is xw? for
+ * consistency, this should by tw or something */
+TermWindow win;
 
+/* XXX what part of this is a ring? usually a ring means a circular linked
+ * list or array, but this is a growing array */
 /* Font Ring Cache */
 enum {
 	FRC_NORMAL,
 	FRC_ITALIC,
 	FRC_BOLD,
-	FRC_ITALICBOLD
+	FRC_ITALICBOLD,
 };
 
 typedef struct {
@@ -1312,6 +1309,9 @@ xinit(int cols, int rows)
 	XMapWindow(xw.dpy, xw.win);
 	XSync(xw.dpy, False);
 
+	/* TODO there is a possiblity for a false triple click to be registered
+	 * immediately after st starts... not really an issue, but why not zero
+	 * these instead? */
 	clock_gettime(CLOCK_MONOTONIC, &xsel.tclick1);
 	clock_gettime(CLOCK_MONOTONIC, &xsel.tclick2);
 	xsel.primary = NULL;
@@ -1779,22 +1779,6 @@ xsetpointermotion(int set)
 {
 	MODBIT(xw.attrs.event_mask, set, PointerMotionMask);
 	XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask, &xw.attrs);
-}
-
-/* Modify the window mode and return the new mode.
- * set clr
- *  0   0   unchanged
- *  0   1   clear
- *  1   0   set
- *  1   1   toggle */
-uint
-xmode(uint set, uint clr)
-{
-	int orig = win.mode;
-	win.mode = (~win.mode & set) | (win.mode & ~clr);
-	if ((win.mode & MODE_REVERSE) != (orig & MODE_REVERSE))
-		redraw();
-	return win.mode;
 }
 
 int

@@ -8,6 +8,7 @@
 /* TODO unicode input with C-S-u */
 /* TODO write/find a script to test control sequences */
 /* TODO test alignment by changing tab size and checking nothing is fucked */
+/* TODO rewrite text rendering? see suckless libdraw in dwm/dmenu */
 
 
 #define UTF_INVALID 0xFFFD
@@ -73,27 +74,37 @@ typedef struct {
 
 typedef Glyph *Line;
 
-enum win_mode {
-	MODE_VISIBLE     = 1 << 0,
-	MODE_FOCUSED     = 1 << 1,
-	MODE_APPKEYPAD   = 1 << 2,
-	MODE_MOUSEBTN    = 1 << 3,
-	MODE_MOUSEMOTION = 1 << 4,
-	MODE_REVERSE     = 1 << 5,
-	MODE_KBDLOCK     = 1 << 6,
-	MODE_HIDE        = 1 << 7,
-	MODE_APPCURSOR   = 1 << 8,
-	MODE_MOUSESGR    = 1 << 9,
-	MODE_BLINK       = 1 << 11,
-	MODE_FBLINK      = 1 << 12,
-	MODE_FOCUS       = 1 << 13,
-	MODE_MOUSEX10    = 1 << 14,
-	MODE_MOUSEMANY   = 1 << 15,
-	MODE_BRCKTPASTE  = 1 << 16,
-	MODE_NUMLOCK     = 1 << 17,
-	MODE_MOUSE       = MODE_MOUSEBTN | MODE_MOUSEMOTION | MODE_MOUSEX10
-	                   | MODE_MOUSEMANY,
+enum mouse_report_mode {
+	MOUSE_NONE = 0,
+	MOUSE_X10,    /* Report button num and location on button presses */
+	MOUSE_BUTTON, /* Report button num, location, and keyboard modifiers on
+	                 button presses and releases */
+	MOUSE_MOTION, /* Like MOUSE_BUTTON, except motion with a button held is
+	                 also reported */
+	MOUSE_MANY,   /* Like MOUSE_MOTION, except motion is reported even without
+	                 a button held */
 };
+
+typedef struct {
+	int tw, th; /* tty width and height */
+	int w, h; /* window width and height */
+	int ch; /* char height */
+	int cw; /* char width  */
+	int cursor; /* cursor style */
+	uint visible:1;
+	uint focused:1;
+	uint blink:1; /* blinking glyphs currently not visible */
+	uint appcursor:1; /* app keypad mode; changes some encodings */
+	uint appkeypad:1; /* app cursor mode; changes some encodings */
+	uint reversevid:1;
+	uint kbdlock:1;
+	uint hidecursor:1;
+	uint reportfocus:1; /* report X focus events to terminal client */
+	uint bracketpaste:1; /* pasted text is "bracketed" with CSI seqs */
+	uint numlock:1;
+	uint mousemode:3; /* see enum mouse_report_mode */
+	uint mousesgr:1; /* mouse reporting done in saner format */
+} TermWindow;
 
 
 /* TODO temporary */
@@ -153,6 +164,7 @@ void ttywrite(const char *, size_t, int);
 
 
 /* win.c */
+extern Window win;
 void xclipcopy(void);
 void xclippaste(void);
 void xselpaste(void);
@@ -169,10 +181,6 @@ int xsetcolorname(int, const char *);
 void xseticontitle(char *);
 void xsettitle(char *);
 int xsetcursor(int);
-uint xmode(uint, uint);
-#define xgetmode() xmode(0,0)
-#define xsetmode(set,flags) ((set) ? xmode((flags),0) : xmode(0,(flags)))
-#define xtogmode(flags) xmode((flags),(flags))
 void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);
