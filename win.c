@@ -139,7 +139,7 @@ static void clientmessage(XEvent *);
 
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
-static void mousereport(XEvent *);
+static int mousereport(uint x, uint y, uint btn, int rel, uint state);
 
 /* When adding a new event type to this table, the event_mask window attribute
  * in xinit needs to be updated with the appropriate mask bit(s). */
@@ -234,8 +234,6 @@ static int frccap = 0;
 static char *usedfont = NULL;
 static double usedfontsize = 0;
 static double defaultfontsize = 0;
-
-static int oldbutton = 3; /* button event on startup: 3 = release */
 
 /* Printable characters in ASCII. Used to estimate the advance width
  * of single wide characters. */
@@ -358,59 +356,30 @@ buttonaction(XButtonEvent *e, int release)
 }
 
 void
+buttonaction(XButtonEvent *e, int rels)
+{
+	if (mousereport(evtcol(e), evtrow(e), e->button, rels, e->state))
+		return;
+	dobutton(e->button, evtctx(e->state, rels, e->x, e->y));
+}
+
+void
 buttonpress(XEvent *e)
 {
-	struct timespec now;
-	int snap;
-
-	if (IS_SET(MODE_MOUSE)) {
-		mousereport(e);
-		return;
-	}
-
-	if (buttonaction(&e->xbutton, 0))
-		return;
-
-	if (e->xbutton.button == Button1) {
-		/* If the user clicks below predefined timeouts specific
-		 * snapping behaviour is exposed. */
-		clock_gettime(CLOCK_MONOTONIC, &now);
-		if (TIMEDIFF(now, xsel.tclick2) <= tripleclicktimeout) {
-			snap = SEL_SNAP_LINE;
-		} else if (TIMEDIFF(now, xsel.tclick1) <= doubleclicktimeout) {
-			snap = SEL_SNAP_WORD;
-		} else {
-			snap = 0;
-		}
-		xsel.tclick2 = xsel.tclick1;
-		xsel.tclick1 = now;
-
-		selstart(evtcol(e), evtrow(e), snap);
-	}
+	buttonaction(&e->xbutton, 0);
 }
 
 void
 brelease(XEvent *e)
 {
-	if (IS_SET(MODE_MOUSE)) {
-		mousereport(e);
-		return;
-	}
-
-	if (buttonaction(&e->xbutton, 1))
-		return;
-	if (e->xbutton.button == Button1)
-		mousesel(e, 1);
+	buttonaction(&e->xbutton, 1);
 }
 
 void
 motionnotify(XEvent *e)
 {
-	if (IS_SET(MODE_MOUSE)) {
-		mousereport(e);
+	if (mousereport(evtcol(e), evtrow(e), 0, 0, e->state))
 		return;
-	}
-
 	mousesel(e, 0);
 }
 
@@ -734,69 +703,103 @@ mousesel(XEvent *e, int done)
 		setsel(seltext(), e->xbutton.time);
 }
 
-void
-mousereport(XEvent *e)
+int
+mousereport(uint x, uint y, uint btn, int rel, uint state)
 {
-	int len, x = evtcol(e), y = evtrow(e),
-	    button = e->xbutton.button, state = e->xbutton.state;
-	char buf[40];
-	static int ox, oy;
+	uint n;
+	uint b;
+	char buf[64];
+	int len;
+	int sent = 0;
 
-	/* from urxvt */
-	if (e->xbutton.type == MotionNotify) {
-		if (x == ox && y == oy)
-			return;
-		if (!IS_SET(MODE_MOUSEMOTION) && !IS_SET(MODE_MOUSEMANY))
-			return;
-		/* MOUSE_MOTION: no reporting if no button is pressed */
-		if (IS_SET(MODE_MOUSEMOTION) && oldbutton == 3)
-			return;
+	/* Non-SGR encoding scheme:
+	 *     CSI 'M' n x y
+	 * where x and y are character cell coordinates of the mouse cursor (the
+	 * upper left corner being (1,1)), and n is binary encoded as follows:
+	 *     000...11            some button released
+	 *     000...bb, bb != 3   button bb + 1 pressed
+	 *     010...bb            button bb + 4 pressed
+	 *     100...bb            button bb + 8 pressed
+	 *     bb1...bb            motion event; if no button is pressed, then
+	 *                             bbbb == 0011; otherwise, the lowest numbered
+	 *                             pressed button is encoded into bbbb as above
+	 *     .....s..            s == 1 iff shift held
+	 *     ....a...            a == 1 iff meta/alt held
+	 *     ...c....            c == 1 iff control held
+	 * To make them a printable character, 32 is added to each of n, x, and y.
+	 * This is fine for n, because its most significant two bits are mutually
+	 * exclusive, so n+32 never exceeds 255. However, this encoding scheme does
+	 * not support x and y coordinates greater than 255-32 = 223.
+	 * Note that, while this same encoding is used for all four of the non-SGR
+	 * mouse reporting modes, some values of n are not used depending on the
+	 * mouse reporting mode (e.g., X10 does not report releases or modifiers).
+	 * 
+	 * SGR encoding scheme:
+	 *     CSI '<' n ';' x ';' y c
+	 * where c is 'M' for a button press or 'm' for a button release, and n, x,
+	 * and y are as above, except that n == 000???11 is impossible, because
+	 * mouse releases are indicated using c instead, with the released button
+	 * encoded into n in the same way as for presses. For motion events, st
+	 * always has c == 'M', but applications should probably allow c == 'm' as
+	 * well. */
 
-		button = oldbutton + 32;
-		ox = x;
-		oy = y;
-	} else {
-		if (!IS_SET(MODE_MOUSESGR) && e->xbutton.type == ButtonRelease) {
-			button = 3;
-		} else {
-			button -= Button1;
-			if (button >= 7)
-				button += 128 - 7;
-			else if (button >= 3)
-				button += 64 - 3;
-		}
-		if (e->xbutton.type == ButtonPress) {
-			oldbutton = button;
-			ox = x;
-			oy = y;
-		} else if (e->xbutton.type == ButtonRelease) {
-			oldbutton = 3;
-			/* MODE_MOUSEX10: no button release reporting */
-			if (IS_SET(MODE_MOUSEX10))
-				return;
-			if (button == 64 || button == 65)
-				return;
-		}
+	if (btn == 0) { /* motion event */
+		if (x == win.prevx && y == win.prevy)
+			goto noreport;
+		if (win.mousemode != MOUSE_MOTION && win.mousemode != MOUSE_MANY)
+			goto noreport;
+		if (win.mousemode == MOUSE_MOTION && win.btns == 0)
+			goto noreport;
+
+		n = 0x20;
+		/* Set b to lowest pressed button, or 12 if no buttons are pressed. */
+		for (b = 1; b < 12 && !(win.btns & (1<<(b-1))); b++)
+			;
+	} else { /* button press or release */
+		if (rel && win.mousemode == MOUSE_X10)
+			goto noreport;
+		if (btn >= 12)
+			goto noreport;
+
+		n = 0;
+		b = btn;
 	}
 
-	if (!IS_SET(MODE_MOUSEX10)) {
-		button += ((state & ShiftMask  ) ? 4  : 0)
-			+ ((state & Mod4Mask   ) ? 8  : 0)
-			+ ((state & ControlMask) ? 16 : 0);
+	/* Encode button value into n. If no button is pressed for a motion event
+	 * in mode MOUSE_MANY, then encode it as a release. */
+	if ((!win.mousesgr && rel) || b >= 12)
+		n += 0x03;
+	else if (b >= 8)
+		n += 0x80 + b - 8;
+	else if (b >= 4)
+		n += 0x40 + b - 4;
+	else
+		n += b - 1;
+
+	if (win.mousemode != MOUSE_X10) {
+		n += (state & ShiftMask)   ? 0x04 : 0;
+		n += (state & Mod1Mask)    ? 0x08 : 0;
+		n += (state & ControlMask) ? 0x10 : 0;
 	}
 
-	if (IS_SET(MODE_MOUSESGR)) {
-		len = snprintf(buf, sizeof(buf), "\033[<%d;%d;%d%c",
-				button, x+1, y+1,
-				e->xbutton.type == ButtonRelease ? 'm' : 'M');
-	} else if (x < 223 && y < 223) {
-		len = snprintf(buf, sizeof(buf), "\033[M%c%c%c",
-				32+button, 32+x+1, 32+y+1);
-	} else {
-		return;
-	}
-
+	if (win.mousesgr)
+		len = snprintf(buf, sizeof buf, "\033[<%u;%u;%u%c",
+				n, x+1, y+1, rel ? 'm' : 'M');
+	else if (x <= 223 && y <= 223)
+		len = snprintf(buf, sizeof buf, "\033[M%c%c%c",
+				n+32, x+32+1, y+32+1);
+	else
+		goto noreport;
 	ttywrite(buf, len, 0);
+	sent = 1;
+
+noreport:
+	win.prevx = x;
+	win.prevy = y;
+	if (1 <= btn && btn <= 11)
+		MODBIT(win.btns, !rel, 1 << (btn-1));
+
+	return sent;
 }
 
 void

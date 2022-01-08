@@ -91,6 +91,8 @@ typedef struct {
 	int ch; /* char height */
 	int cw; /* char width  */
 	int cursor; /* cursor style */
+	int prevx, prevy; /* last cell moused over */
+	uint btns; /* bit mask of pressed btns */
 	uint visible:1;
 	uint focused:1;
 	uint blink:1; /* blinking glyphs currently not visible */
