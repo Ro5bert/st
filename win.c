@@ -376,7 +376,7 @@ buttonpress(XEvent *e)
 }
 
 void
-brelease(XEvent *e)
+buttonrelease(XEvent *e)
 {
 	buttonaction(&e->xbutton, 1);
 }
