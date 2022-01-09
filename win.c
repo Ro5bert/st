@@ -139,7 +139,7 @@ static void clientmessage(XEvent *);
 
 static void setsel(char *, Time);
 static void mousesel(XEvent *, int);
-static int mousereport(uint x, uint y, uint btn, int rel, uint state);
+static void mousereport(uint x, uint y, uint btn, int rel, uint state);
 
 /* When adding a new event type to this table, the event_mask window attribute
  * in xinit needs to be updated with the appropriate mask bit(s). */
@@ -356,11 +356,17 @@ buttonaction(XButtonEvent *e, int release)
 }
 
 void
-buttonaction(XButtonEvent *e, int rels)
+buttonaction(XButtonEvent *e, int rel)
 {
-	if (mousereport(evtcol(e), evtrow(e), e->button, rels, e->state))
-		return;
-	dobutton(e->button, evtctx(e->state, rels, e->x, e->y));
+	uint btn = e->button;
+
+	if (1 <= btn && btn <= 11)
+		MODBIT(win.btns, !rel, 1 << (btn-1));
+
+	if (win.mousemode != MOUSE_NONE)
+		mousereport(evtcol(e), evtrow(e), btn, rel, e->state);
+	else
+		dobutton(btn, evtctx(e->state, rel, e->x, e->y));
 }
 
 void
@@ -378,9 +384,10 @@ brelease(XEvent *e)
 void
 motionnotify(XEvent *e)
 {
-	if (mousereport(evtcol(e), evtrow(e), 0, 0, e->state))
-		return;
-	mousesel(e, 0);
+	if (win.mousemode != MOUSE_NONE)
+		mousereport(evtcol(e), evtrow(e), 0, 0, e->state);
+	else
+		mousesel(e, 0);
 }
 
 void
@@ -703,14 +710,13 @@ mousesel(XEvent *e, int done)
 		setsel(seltext(), e->xbutton.time);
 }
 
-int
+void
 mousereport(uint x, uint y, uint btn, int rel, uint state)
 {
 	uint n;
 	uint b;
 	char buf[64];
 	int len;
-	int sent = 0;
 
 	/* Non-SGR encoding scheme:
 	 *     CSI 'M' n x y
@@ -745,21 +751,26 @@ mousereport(uint x, uint y, uint btn, int rel, uint state)
 
 	if (btn == 0) { /* motion event */
 		if (x == win.prevx && y == win.prevy)
-			goto noreport;
+			return;
 		if (win.mousemode != MOUSE_MOTION && win.mousemode != MOUSE_MANY)
-			goto noreport;
+			return;
 		if (win.mousemode == MOUSE_MOTION && win.btns == 0)
-			goto noreport;
+			return;
 
 		n = 0x20;
 		/* Set b to lowest pressed button, or 12 if no buttons are pressed. */
 		for (b = 1; b < 12 && !(win.btns & (1<<(b-1))); b++)
 			;
 	} else { /* button press or release */
-		if (rel && win.mousemode == MOUSE_X10)
-			goto noreport;
-		if (btn >= 12)
-			goto noreport;
+		if (rel) {
+			if (win.mousemode == MOUSE_X10)
+				return;
+			/* Don't send release events for scroll up/down */
+			if (btn == 4 || btn == 5)
+				return;
+		}
+		if (btn < 1 || btn > 11)
+			return;
 
 		n = 0;
 		b = btn;
@@ -767,7 +778,7 @@ mousereport(uint x, uint y, uint btn, int rel, uint state)
 
 	/* Encode button value into n. If no button is pressed for a motion event
 	 * in mode MOUSE_MANY, then encode it as a release. */
-	if ((!win.mousesgr && rel) || b >= 12)
+	if ((!win.mousesgr && rel) || b == 12)
 		n += 0x03;
 	else if (b >= 8)
 		n += 0x80 + b - 8;
@@ -789,17 +800,11 @@ mousereport(uint x, uint y, uint btn, int rel, uint state)
 		len = snprintf(buf, sizeof buf, "\033[M%c%c%c",
 				n+32, x+32+1, y+32+1);
 	else
-		goto noreport;
+		return;
 	ttywrite(buf, len, 0);
-	sent = 1;
 
-noreport:
 	win.prevx = x;
 	win.prevy = y;
-	if (1 <= btn && btn <= 11)
-		MODBIT(win.btns, !rel, 1 << (btn-1));
-
-	return sent;
 }
 
 void
