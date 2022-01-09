@@ -115,6 +115,7 @@ typedef struct {
 	int col;         /* nb col */
 	Line *line;      /* screen */
 	Line *alt;       /* alternate screen */
+	/* TODO replace with bitfield to store info per line */
 	int *dirty;      /* dirtyness of lines */
 	TCursor c;       /* cursor */
 	int ocx;         /* old cursor col */
@@ -306,7 +307,7 @@ seltext(void)
 		return NULL;
 
 	bufsize = (term.col+1) * (sel.ne.y-sel.nb.y+1) * UTF_SIZ;
-	ptr = str = xmalloc(bufsize);
+	ptr = str = emalloc(bufsize);
 
 	/* append every set and selected glyph to the selection */
 	for (y = sel.nb.y; y <= sel.ne.y; y++) {
@@ -1737,7 +1738,7 @@ void
 strreset(void)
 {
 	strescseq = (STREscape){
-		.buf = xrealloc(strescseq.buf, STR_BUF_SIZ),
+		.buf = erealloc(strescseq.buf, STR_BUF_SIZ),
 		.siz = STR_BUF_SIZ,
 	};
 }
@@ -1752,7 +1753,7 @@ tsendbreak(void)
 void
 tprinter(char *s, size_t len)
 {
-	if (iofd != -1 && xwrite(iofd, s, len) < 0) {
+	if (iofd != -1 && ewrite(iofd, s, len) < 0) {
 		perror("Error writing to output file");
 		close(iofd);
 		iofd = -1;
@@ -2100,7 +2101,7 @@ tputc(Rune u)
 			if (strescseq.siz > (SIZE_MAX - UTF_SIZ) / 2)
 				return;
 			strescseq.siz *= 2;
-			strescseq.buf = xrealloc(strescseq.buf, strescseq.siz);
+			strescseq.buf = erealloc(strescseq.buf, strescseq.siz);
 		}
 
 		memmove(&strescseq.buf[strescseq.len], c, len);
@@ -2242,21 +2243,21 @@ tresize(int col, int row)
 	}
 
 	/* resize to new height */
-	term.line = xrealloc(term.line, row * sizeof(Line));
-	term.alt  = xrealloc(term.alt,  row * sizeof(Line));
-	term.dirty = xrealloc(term.dirty, row * sizeof(*term.dirty));
-	term.tabs = xrealloc(term.tabs, col * sizeof(*term.tabs));
+	term.line = erealloc(term.line, row * sizeof(Line));
+	term.alt  = erealloc(term.alt,  row * sizeof(Line));
+	term.dirty = erealloc(term.dirty, row * sizeof(*term.dirty));
+	term.tabs = erealloc(term.tabs, col * sizeof(*term.tabs));
 
 	/* resize each row to new width, zero-pad if needed */
 	for (i = 0; i < minrow; i++) {
-		term.line[i] = xrealloc(term.line[i], col * sizeof(Glyph));
-		term.alt[i]  = xrealloc(term.alt[i],  col * sizeof(Glyph));
+		term.line[i] = erealloc(term.line[i], col * sizeof(Glyph));
+		term.alt[i]  = erealloc(term.alt[i],  col * sizeof(Glyph));
 	}
 
 	/* allocate any new rows */
 	for (/* i = minrow */; i < row; i++) {
-		term.line[i] = xmalloc(col * sizeof(Glyph));
-		term.alt[i] = xmalloc(col * sizeof(Glyph));
+		term.line[i] = emalloc(col * sizeof(Glyph));
+		term.alt[i] = emalloc(col * sizeof(Glyph));
 	}
 	if (col > term.col) {
 		bp = term.tabs + term.col;

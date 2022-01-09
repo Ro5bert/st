@@ -9,6 +9,7 @@
 /* TODO write/find a script to test control sequences */
 /* TODO test alignment by changing tab size and checking nothing is fucked */
 /* TODO rewrite text rendering? see suckless libdraw in dwm/dmenu */
+/* TODO rename x-related functions */
 
 
 #define UTF_INVALID 0xFFFD
@@ -129,10 +130,10 @@ extern char *opt_title;
 
 /* util.c */
 void die(const char *, ...);
-void *xmalloc(size_t);
-void *xrealloc(void *, size_t);
-char *xstrdup(const char *);
-ssize_t xwrite(int, const char *, size_t);
+void *emalloc(size_t);
+void *erealloc(void *, size_t);
+char *estrdup(const char *);
+ssize_t ewrite(int, const char *, size_t);
 size_t utf8dec(const char *, Rune *, size_t);
 size_t utf8enc(Rune, char *);
 char *base64dec(const char *);

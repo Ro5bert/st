@@ -54,7 +54,7 @@ die(const char *errstr, ...)
 }
 
 void *
-xmalloc(size_t len)
+emalloc(size_t len)
 {
 	void *p;
 
@@ -65,7 +65,7 @@ xmalloc(size_t len)
 }
 
 void *
-xrealloc(void *p, size_t len)
+erealloc(void *p, size_t len)
 {
 	if ((p = realloc(p, len)) == NULL)
 		die("realloc: %s\n", strerror(errno));
@@ -74,7 +74,7 @@ xrealloc(void *p, size_t len)
 }
 
 char *
-xstrdup(const char *s)
+estrdup(const char *s)
 {
 	char *p;
 
@@ -85,15 +85,17 @@ xstrdup(const char *s)
 }
 
 ssize_t
-xwrite(int fd, const char *s, size_t len)
+ewrite(int fd, const char *s, size_t len)
 {
 	size_t aux = len;
 	ssize_t r;
 
 	while (len > 0) {
-		r = write(fd, s, len);
-		if (r < 0)
+		if ((r = write(fd, s, len)) < 0) {
+			if (errno == EINTR)
+				continue;
 			return r;
+		}
 		len -= r;
 		s += r;
 	}
@@ -180,7 +182,7 @@ base64dec(const char *src)
 
 	if (in_len % 4)
 		in_len += 4 - (in_len % 4);
-	result = dst = xmalloc(in_len / 4 * 3 + 1);
+	result = dst = emalloc(in_len / 4 * 3 + 1);
 	while (*src) {
 		int a = base64_digits[(uchar) base64dec_getc(&src)];
 		int b = base64_digits[(uchar) base64dec_getc(&src)];

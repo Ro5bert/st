@@ -627,7 +627,7 @@ xclipcopy(void)
 	xsel.clipboard = NULL;
 
 	if (xsel.primary != NULL) {
-		xsel.clipboard = xstrdup(xsel.primary);
+		xsel.clipboard = estrdup(xsel.primary);
 		clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
 		XSetSelectionOwner(xw.dpy, clipboard, xw.win, CurrentTime);
 	}
@@ -860,7 +860,7 @@ xresize(int col, int row)
 	xclear(0, 0, win.w, win.h);
 
 	/* resize to new width */
-	xw.specbuf = xrealloc(xw.specbuf, col * sizeof(GlyphFontSpec));
+	xw.specbuf = erealloc(xw.specbuf, col * sizeof(GlyphFontSpec));
 }
 
 ushort
@@ -908,7 +908,7 @@ xloadcolors(void)
 		dc.collen = 256;
 		for (c = &colorname[256]; *c; c++)
 			dc.collen++;
-		dc.col = xmalloc(dc.collen * sizeof(Color));
+		dc.col = emalloc(dc.collen * sizeof(Color));
 	}
 
 	for (i = 0; i < dc.collen; i++) {
@@ -1273,7 +1273,7 @@ xinit(int cols, int rows)
 	XFillRectangle(xw.dpy, xw.buf, dc.gc, 0, 0, win.w, win.h);
 
 	/* font spec buffer */
-	xw.specbuf = xmalloc(cols * sizeof(GlyphFontSpec));
+	xw.specbuf = emalloc(cols * sizeof(GlyphFontSpec));
 
 	/* Xft rendering context */
 	xw.draw = XftDrawCreate(xw.dpy, xw.buf, xw.vis, xw.cmap);
@@ -1430,7 +1430,7 @@ xmakeglyphfontspecs(XftGlyphFontSpec *specs, const Glyph *glyphs, int len, int x
 			/* Allocate memory for the new cache entry. */
 			if (frclen >= frccap) {
 				frccap += 16;
-				frc = xrealloc(frc, frccap * sizeof(Fontcache));
+				frc = erealloc(frc, frccap * sizeof(Fontcache));
 			}
 
 			frc[frclen].font = XftFontOpenPattern(xw.dpy,
