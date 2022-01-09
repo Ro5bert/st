@@ -87,6 +87,13 @@ enum mouse_report_mode {
 };
 
 typedef struct {
+	Atom xtarget;
+	char *primary, *clipboard;
+	struct timespec tclick1;
+	struct timespec tclick2;
+} XSelection;
+
+typedef struct {
 	int tw, th; /* tty width and height */
 	int w, h; /* window width and height */
 	int ch; /* char height */
@@ -108,6 +115,28 @@ typedef struct {
 	uint mousemode:3; /* see enum mouse_report_mode */
 	uint mousesgr:1; /* mouse reporting done in saner format */
 } TermWindow;
+
+typedef struct {
+	Display *dpy;
+	Colormap cmap;
+	Window win;
+	Drawable buf;
+	XftGlyphFontSpec *specbuf; /* font spec buffer used for rendering */
+	Atom xembed, wmdeletewin, netwmname, netwmiconname, netwmpid;
+	struct {
+		XIM xim;
+		XIC xic;
+		XPoint spot;
+		XVaNestedList spotlist;
+	} ime;
+	XftDraw *draw;
+	Visual *vis;
+	XSetWindowAttributes attrs; /* TODO do we really need to save this? i think not */
+	int scr;
+	int isfixed; /* is fixed geometry? */
+	int l, t; /* left and top offset */
+	int gm; /* geometry mask */
+} XWindow;
 
 
 /* TODO temporary */
@@ -156,7 +185,6 @@ void tdump(void);
 void tdumpsel(void);
 void tsendbreak(void);
 int tattrset(int);
-void tinit(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);
 void ttyhangup(void);
@@ -164,10 +192,19 @@ int ttynew(const char *, char *, const char *, char **);
 size_t ttyread(void);
 void ttyresize(int, int);
 void ttywrite(const char *, size_t, int);
+void tinit(int, int);
+int tstart(void);
 
 
 /* win.c */
-extern Window win;
+/* TODO temp; these shouldn't be public probably */
+extern TermWindow win;
+extern XWindow xw;
+extern XSelection xsel;
+extern void (*handler[LASTEvent])(XEvent *);
+int xtocol(int);
+int ytorow(int);
+void mousesel(EvtCtx, int);
 void xclipcopy(void);
 void xclippaste(void);
 void xselpaste(void);
@@ -189,4 +226,4 @@ void xsetsel(char *);
 int xstartdraw(void);
 void xximspot(int, int);
 void xinit(int, int);
-void xmain(void);
+int xstart(void);

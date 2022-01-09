@@ -2,30 +2,34 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 #include <wchar.h>
 #include <X11/Xlib.h>
 #include <X11/cursorfont.h>
 #include <X11/keysym.h>
+#include <X11/Xft/Xft.h>
 
 #include "st.h"
 
-static void clipcopy(uint, Arg);
-static void clippaste(uint, Arg);
-static void selpaste(uint, Arg);
-static void zoomrel(uint, Arg);
-static void zoomrst(uint, Arg);
-static void numlock(uint, Arg);
-static void sendstr(uint, Arg);
-static void sendcsi(uint, Arg);
-static void printscreen(uint, Arg);
-static void selprint(uint, Arg);
-static void sendbreak(uint, Arg);
-static void togprinter(uint, Arg);
+static void selstart_(Arg, EvtCtx); /* TODO come up with a better name */
+static void selstop(Arg, EvtCtx);
+static void clipcopy(Arg, EvtCtx);
+static void clippaste(Arg, EvtCtx);
+static void selpaste(Arg, EvtCtx);
+static void zoomrel(Arg, EvtCtx);
+static void zoomrst(Arg, EvtCtx);
+static void numlock(Arg, EvtCtx);
+static void sendstr(Arg, EvtCtx);
+static void sendcsi(Arg, EvtCtx);
+static void printscreen(Arg, EvtCtx);
+static void selprint(Arg, EvtCtx);
+static void sendbreak(Arg, EvtCtx);
+static void togprinter(Arg, EvtCtx);
 
 /* See: http://freedesktop.org/software/fontconfig/fontconfig-user.html */
 char *font = "monospace:pixelsize=32:antialias=true:autohint=true";
 int borderpx = 2;
-/* Kerning / character bounding-box multipliers */
+/* Letterspacing / character bounding-box multipliers */
 float cwscale = 1.0;
 float chscale = 1.0;
 
@@ -86,6 +90,7 @@ char *termname = "st-256color";
 uint tabspaces = 4;
 
 /* Terminal colors (16 first used in escape sequence) */
+/* TODO switch to rgb only */
 const char *colorname[] = {
 	/* 8 normal colors */
 	"black",
@@ -154,17 +159,17 @@ uint defaultattr = 11;
 #define SENDUNICODE(cp) SENDCSI((cp),S,'u')
 #define ARG_DUMMY {.i = 0}
 
-/* Beware that overloading Button1 will disable the selection. */
 Btn btns[] = {
-	{ Button2,  R,           0,  selpaste, ARG_DUMMY  },
-	{ Button4,  S,  KEXCL(S)|R,  SENDSTR("\033[5;2~") },
-	{ Button4,  0,           R,  SENDSTR("\031")      },
-	{ Button5,  S,  KEXCL(S)|R,  SENDSTR("\033[6;2~") },
-	{ Button5,  0,           R,  SENDSTR("\005")      },
+	{ Button1,  0,           R,  selstart_, ARG_DUMMY  },
+	{ Button1,  R,           0,    selstop, ARG_DUMMY  },
+	{ Button2,  R,           0,   selpaste, ARG_DUMMY  },
+	{ Button4,  S,  KEXCL(S)|R,   SENDSTR("\033[5;2~") },
+	{ Button4,  0,           R,   SENDSTR("\031")      },
+	{ Button5,  S,  KEXCL(S)|R,   SENDSTR("\033[6;2~") },
+	{ Button5,  0,           R,   SENDSTR("\005")      },
 	{ 0 },
 };
 
-/* TODO: add RELS to clr */
 Key keys[] = {
 	/* Shortcuts (must be first to get precedence) */
 	{ XK_Home,      TERMMOD,  KEXCL(TERMMOD)|R,       zoomrst,  ARG_DUMMY },
@@ -179,6 +184,9 @@ Key keys[] = {
 	{ XK_C,         TERMMOD,  KEXCL(TERMMOD)|R,      clipcopy,  ARG_DUMMY },
 	{ XK_V,         TERMMOD,  KEXCL(TERMMOD)|R,     clippaste,  ARG_DUMMY },
 	{ XK_Y,         TERMMOD,  KEXCL(TERMMOD)|R,      selpaste,  ARG_DUMMY },
+
+	/* TODO: listen for modifier key presses to update selection type without
+	 * needing to move mouse */
 
 	/* ASCII special cases (handlesym handles most cases already) */
 	{ XK_space,          S,             R,  SENDCSI(' ',0,'u') },
@@ -303,69 +311,99 @@ SelType seltypes[] = {
 	{ 0 },
 };
 
-uint
-confstate(uint xstate, int rels)
+EvtCtx
+evtctx(uint xstate, int rels, int x, int y)
 {
-	uint winmode;
-
-	winmode = xgetmode();
-	return (winmode&MODE_APPCURSOR ? CURS : 0)
-		| (winmode&MODE_APPKEYPAD ? KPAD : 0)
-		| (winmode&MODE_NUMLOCK ? NMLK : 0)
-		| (rels ? RELS : 0)
-		| (xstate << MODOFFS);
+	return (EvtCtx){
+		.m = (win.appcursor ? CURS : 0)
+			| (win.appkeypad ? KPAD : 0)
+			| (win.numlock ? NMLK : 0)
+			| (rels ? RELS : 0)
+			| (xstate << MODOFFS),
+		.x = x,
+		.y = y,
+	};
 }
 
 void
-clipcopy(uint state, Arg arg)
+selstart_(Arg arg, EvtCtx ctx)
+{
+	struct timespec now;
+	int snap;
+
+	/* If the user clicks multiple times within predefined timeouts, specific
+	 * snapping behaviour is exposed. */
+	/* TODO xsel not visible */
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	if (TIMEDIFF(now, xsel.tclick2) <= tripleclicktimeout) {
+		snap = SEL_SNAP_LINE;
+	} else if (TIMEDIFF(now, xsel.tclick1) <= doubleclicktimeout) {
+		snap = SEL_SNAP_WORD;
+	} else {
+		snap = SEL_SNAP_CHAR;
+	}
+	xsel.tclick2 = xsel.tclick1;
+	xsel.tclick1 = now;
+
+	selstart(xtocol(ctx.x), ytorow(ctx.y), snap);
+}
+
+void
+selstop(Arg arg, EvtCtx ctx)
+{
+	mousesel(ctx, 1);
+}
+
+void
+clipcopy(Arg arg, EvtCtx ctx)
 { xclipcopy(); }
 
 void
-clippaste(uint state, Arg arg)
+clippaste(Arg arg, EvtCtx ctx)
 { xclippaste(); }
 
 void
-selpaste(uint state, Arg arg)
+selpaste(Arg arg, EvtCtx ctx)
 { xselpaste(); }
 
 void
-zoomrel(uint state, Arg arg)
+zoomrel(Arg arg, EvtCtx ctx)
 { xzoomrel(arg.d); }
 
 void
-zoomrst(uint state, Arg arg)
+zoomrst(Arg arg, EvtCtx ctx)
 { xzoomrst(); }
 
 void
-numlock(uint state, Arg arg)
-{ xtogmode(MODE_NUMLOCK); }
+numlock(Arg arg, EvtCtx ctx)
+{ win.numlock = !win.numlock; }
 
 void
-sendstr(uint state, Arg arg)
+sendstr(Arg arg, EvtCtx ctx)
 { ttywrite(arg.str.s, arg.str.l, 1); }
 
 void
-sendcsi(uint state, Arg arg)
+sendcsi(Arg arg, EvtCtx ctx)
 {
 	char buf[64];
 	size_t len;
 
-	len = csienc(buf, sizeof buf, state, arg.csi.n, arg.csi.m, arg.csi.c);
+	len = csienc(buf, sizeof buf, ctx.m, arg.csi.n, arg.csi.m, arg.csi.c);
 	ttywrite(buf, len, 1);
 }
 
 void
-printscreen(uint state, Arg arg)
+printscreen(Arg arg, EvtCtx ctx)
 { tdump(); }
 
 void
-selprint(uint state, Arg arg)
+selprint(Arg arg, EvtCtx ctx)
 { tdumpsel(); }
 
 void
-sendbreak(uint state, Arg arg)
+sendbreak(Arg arg, EvtCtx ctx)
 { tsendbreak(); }
 
 void
-togprinter(uint state, Arg arg)
+togprinter(Arg arg, EvtCtx ctx)
 { ttogprinter(); }

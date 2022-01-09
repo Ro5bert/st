@@ -4,7 +4,7 @@
 #define CURS (1<<0) /* Application cursor mode */
 #define KPAD (1<<1) /* Application keypad mode */
 #define NMLK (1<<2) /* Num lock */
-#define RELS (1<<3) /* Key/buttom release */
+#define RELS (1<<3) /* Key/button release */
 /* To allow checking more boolean properties when matching key/button events,
  * define them here and modify MODOFFS and confstate. */
 #define MODOFFS 4
@@ -37,7 +37,12 @@ typedef union {
 #define ARG_STR(s_)       { .str.l = sizeof(s_)-1, .str.s = (s_) }
 #define ARG_CSI(n_,m_,c_) { .csi.n = (n_), .csi.m = (m_), .csi.c = (c_) }
 
-typedef void (*Handler)(uint state, Arg arg);
+typedef struct {
+	uint m;   /* boolean properties, particularly keyboard modifiers */
+	int x, y; /* cursor position */
+} EvtCtx;
+
+typedef void (*Handler)(Arg, EvtCtx);
 
 /* Tristate logic: each bit in set/clr is interpreted as follows:
  * set  clr
@@ -107,4 +112,4 @@ extern SelType seltypes[];
  * received from X lib) and converts it into "st state" (i.e., the boolean
  * properties used in matching events to actions in the btns, keys, and
  * seltypes tables). */
-uint confstate(uint, int);
+EvtCtx evtctx(uint xstate, int rels, int x, int y);

@@ -18,7 +18,8 @@
 #include <termios.h>
 #include <unistd.h>
 #include <wchar.h>
-#include <X11/Xlib.h> /* TODO gross? */
+#include <X11/Xlib.h> /* TODO temp? */
+#include <X11/Xft/Xft.h> /* TODO temp? */
 
 #include "st.h"
 
@@ -93,7 +94,7 @@ typedef struct {
 
 typedef struct {
 	int active; /* Is the user currently selecting text? */
-	int emtpy;  /* Is anything highlighted? */
+	int empty;  /* Is anything highlighted? */
 	int type;   /* regular vs rectangular */
 	int snap;
 	int alt; /* TODO: why is this needed? why not just selclear in tswapscreen?
@@ -841,15 +842,6 @@ treset(void)
 }
 
 void
-tinit(int col, int row)
-{
-	term = (Term){ .c = { .attr = { .fg = defaultfg, .bg = defaultbg } } };
-	tresize(col, row);
-	treset();
-	selinit();
-}
-
-void
 tswapscreen(void)
 {
 	Line *tmp = term.line;
@@ -1301,7 +1293,7 @@ tsetmode(int priv, int set, const int *args, int narg)
 				break;
 			case 1002: /* report motion on button press */
 				xsetpointermotion(0);
-				win.mousemode = set ? MOUSE_MOTION : NOUSE_NONE;
+				win.mousemode = set ? MOUSE_MOTION : MOUSE_NONE;
 				break;
 			case 1003: /* enable all mouse motions */
 				xsetpointermotion(set);
@@ -2334,3 +2326,22 @@ redraw(void)
 	tfulldirt();
 	draw();
 }
+
+void
+tinit(int col, int row)
+{
+	term = (Term){ .c = { .attr = { .fg = defaultfg, .bg = defaultbg } } };
+	tresize(col, row);
+	treset();
+	selinit();
+}
+
+int
+tstart(void)
+{
+	return ttynew(opt_line, shell, opt_io, opt_cmd);
+}
+
+void
+tproc(void)
+{} /* TODO */
