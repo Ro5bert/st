@@ -223,6 +223,7 @@ typedef struct {
 	int isfixed; /* is fixed geometry? */
 	int l, t; /* left and top offset */
 	int gm; /* geometry mask */
+	char *title;
 } XWindow;
 
 
@@ -236,7 +237,6 @@ extern int opt_fixed;
 extern char *opt_io;
 extern char *opt_line;
 extern char *opt_name;
-extern char *opt_title;
 
 extern char *defaultfont;
 extern char *defaultshell;
@@ -246,6 +246,7 @@ extern double minlatency;
 extern double maxlatency;
 extern double blinktimeout;
 extern char *termname;
+extern char *defaulttitle;
 
 
 /* util.c */
@@ -347,5 +348,5 @@ void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);
 void xximspot(int, int);
-void xinit(int, int, char *);
+void xinit(int, int, char *, char *);
 int xstart(void);

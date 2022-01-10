@@ -1604,7 +1604,7 @@ void
 xseticontitle(char *p)
 {
 	XTextProperty prop;
-	DEFAULT(p, opt_title);
+	DEFAULT(p, xw.title);
 
 	Xutf8TextListToTextProperty(xw.dpy, &p, 1, XUTF8StringStyle, &prop);
 	XSetWMIconName(xw.dpy, xw.win, &prop);
@@ -1616,7 +1616,7 @@ void
 xsettitle(char *p)
 {
 	XTextProperty prop;
-	DEFAULT(p, opt_title);
+	DEFAULT(p, xw.title);
 
 	Xutf8TextListToTextProperty(xw.dpy, &p, 1, XUTF8StringStyle, &prop);
 	XSetWMName(xw.dpy, xw.win, &prop);
@@ -1723,7 +1723,7 @@ xbell(void)
 }
 
 void
-xinit(int cols, int rows, char *font)
+xinit(int cols, int rows, char *title, char *font)
 {
 	XGCValues gcvalues;
 	Cursor cursor;
@@ -1830,6 +1830,7 @@ xinit(int cols, int rows, char *font)
 
 	win.numlock = 1;
 	/* TODO: every other mode bit is 0; do this explicitly? */
+	xw.title = title;
 	xsettitle(NULL);
 	xhints();
 	XMapWindow(xw.dpy, xw.win);

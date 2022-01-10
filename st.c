@@ -42,6 +42,11 @@ double blinktimeout = 800; /* Half blink period in ms; 0 to disable blink.*/
 
 char *termname = "st-256color";
 
+/* Window title priority:
+ * 1. whatever is set by the terminal client
+ * 2. defaulttitle variable */
+char *defaulttitle = "st";
+
 char *argv0;
 
 char *opt_class = NULL;
@@ -53,15 +58,14 @@ int opt_fixed   = 0;
 char *opt_io    = NULL;
 char *opt_line  = NULL;
 char *opt_name  = NULL;
-char *opt_title = NULL;
 
 void
 usage(void)
 {
 	die("usage: %s [-iv] [-c class] [-f font] [-g geometry] [-n name] [-o file]\n"
-	    "          [-T title] [-t title] [-w windowid] [[-e] command [args ...]]\n"
+	    "          [-t title] [-w windowid] [[-e] command [args ...]]\n"
 	    "       %s [-iv] [-c class] [-f font] [-g geometry] [-n name] [-o file]\n"
-	    "          [-T title] [-t title] [-w windowid] -l line [stty_args ...]\n",
+	    "          [-t title] [-w windowid] -l line [stty_args ...]\n",
 		argv0, argv0);
 }
 
@@ -192,9 +196,11 @@ run(char *shell)
 int
 main(int argc, char **argv)
 {
-	uint cols, rows;
+	uint cols = defaultcols;
+	uint rows = defaultrows;
 	char *font = defaultfont;
 	char *shell = resolveshell();
+	char *title = defaulttitle;
 
 	ARGBEGIN {
 	case 'c':
@@ -223,8 +229,7 @@ main(int argc, char **argv)
 		opt_name = EARGF(usage());
 		break;
 	case 't':
-	case 'T':
-		opt_title = EARGF(usage());
+		title = EARGF(usage());
 		break;
 	case 'w':
 		opt_embed = EARGF(usage());
@@ -240,17 +245,13 @@ run:
 	if (argc > 0) /* eat all remaining arguments */
 		opt_cmd = argv;
 
-	if (!opt_title)
-		opt_title = (opt_line || !opt_cmd) ? "st" : opt_cmd[0];
-
 	setlocale(LC_CTYPE, "");
 	XSetLocaleModifiers(""); /* TODO: move to X land */
+
 	/* TODO: data flow with cols/rows is weird... and broken! the geometry
 	 * string could change size, but tinit doesn't know that */
-	cols = MAX(defaultcols, 1);
-	rows = MAX(defaultrows, 1);
 	tinit(cols, rows);
-	xinit(cols, rows, font);
+	xinit(cols, rows, title, font);
 	run(shell);
 
 	return 0;
