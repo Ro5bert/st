@@ -181,6 +181,7 @@ uint mousebg = 0;
 uint defaultattr = 11; /* Color used to display font attributes when
                           fontconfig selected a font which doesn't match
                           the ones requested. XXX what? */
+char *classname = "st";
 
 /* Terminal colors (16 first used in escape sequence) */
 /* TODO switch to rgb only */
@@ -986,8 +987,7 @@ xclear(int x1, int y1, int x2, int y2)
 void
 xhints(void)
 {
-	XClassHint class = {opt_name ? opt_name : termname,
-	                    opt_class ? opt_class : termname};
+	XClassHint class = {xw.name, classname};
 	XWMHints wm = {.flags = InputHint, .input = 1};
 	XSizeHints *sizeh;
 
@@ -1723,7 +1723,7 @@ xbell(void)
 }
 
 void
-xinit(int cols, int rows, char *title, char *font)
+xinit(int cols, int rows, char *title, char *name, char *font)
 {
 	XGCValues gcvalues;
 	Cursor cursor;
@@ -1831,6 +1831,7 @@ xinit(int cols, int rows, char *title, char *font)
 	win.numlock = 1;
 	/* TODO: every other mode bit is 0; do this explicitly? */
 	xw.title = title;
+	xw.name = name;
 	xsettitle(NULL);
 	xhints();
 	XMapWindow(xw.dpy, xw.win);

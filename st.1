@@ -4,8 +4,6 @@ st \- simple terminal
 .SH SYNOPSIS
 .B st
 .RB [ \-iv ]
-.RB [ \-c
-.IR class ]
 .RB [ \-f
 .IR font ]
 .RB [ \-g
@@ -26,8 +24,6 @@ st \- simple terminal
 .PP
 .B st
 .RB [ \-iv ]
-.RB [ \-c
-.IR class ]
 .RB [ \-f
 .IR font ]
 .RB [ \-g
@@ -48,9 +44,6 @@ st \- simple terminal
 is a simple terminal emulator.
 .SH OPTIONS
 .TP
-.BI \-c " class"
-defines the window class (default $TERM).
-.TP
 .BI \-f " font"
 defines the
 .I font
@@ -66,7 +59,7 @@ for further details.
 will fixate the position given with the -g option.
 .TP
 .BI \-n " name"
-defines the window instance name (default $TERM).
+defines the window instance name (default 'st').
 .TP
 .BI \-o " iofile"
 writes all the I/O to

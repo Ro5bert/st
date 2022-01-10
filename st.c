@@ -32,13 +32,13 @@ char *defaultshell = "/bin/sh";
 /* Terminal size priority:
  * 1. whatever the user/window manager forces
  * 2. -g option
- * 3. defaultcols and defaultrows variables*/
+ * 3. defaultcols and defaultrows variables */
 uint defaultcols = 80;
 uint defaultrows = 24;
 
 double minlatency = 8;     /* Minimum time the window is dirty in ms. */
 double maxlatency = 33;    /* Maximum time the window is dirty in ms. */
-double blinktimeout = 800; /* Half blink period in ms; 0 to disable blink.*/
+double blinktimeout = 800; /* Half blink period in ms; 0 to disable blink. */
 
 char *termname = "st-256color";
 
@@ -47,24 +47,26 @@ char *termname = "st-256color";
  * 2. defaulttitle variable */
 char *defaulttitle = "st";
 
+/* Instance name property (for the window manager) priority:
+ * 1. -n option
+ * 2. defaultname variable */
+char *defaultname = "st";
+
 char *argv0;
 
-char *opt_class = NULL;
 char **opt_cmd  = NULL;
 char *opt_embed = NULL;
-char *opt_font  = NULL;
 char *opt_geom  = NULL;
 int opt_fixed   = 0;
 char *opt_io    = NULL;
 char *opt_line  = NULL;
-char *opt_name  = NULL;
 
 void
 usage(void)
 {
-	die("usage: %s [-iv] [-c class] [-f font] [-g geometry] [-n name] [-o file]\n"
+	die("usage: %s [-iv] [-f font] [-g geometry] [-n name] [-o file]\n"
 	    "          [-t title] [-w windowid] [[-e] command [args ...]]\n"
-	    "       %s [-iv] [-c class] [-f font] [-g geometry] [-n name] [-o file]\n"
+	    "       %s [-iv] [-f font] [-g geometry] [-n name] [-o file]\n"
 	    "          [-t title] [-w windowid] -l line [stty_args ...]\n",
 		argv0, argv0);
 }
@@ -102,6 +104,7 @@ run(char *shell)
 	struct timespec tv, *tvp, now, trigger, lastblink;
 	XEvent ev;
 
+	/* TODO: do we really need {x,t}init *and* {x,t}start? reconsider. */
 	xfd = xstart();
 	tfd = tstart(shell);
 
@@ -201,11 +204,9 @@ main(int argc, char **argv)
 	char *font = defaultfont;
 	char *shell = resolveshell();
 	char *title = defaulttitle;
+	char *name = defaultname;
 
 	ARGBEGIN {
-	case 'c':
-		opt_class = EARGF(usage());
-		break;
 	case 'e':
 		if (argc > 0)
 			--argc, ++argv;
@@ -226,7 +227,7 @@ main(int argc, char **argv)
 		opt_line = EARGF(usage());
 		break;
 	case 'n':
-		opt_name = EARGF(usage());
+		name = EARGF(usage());
 		break;
 	case 't':
 		title = EARGF(usage());
@@ -251,7 +252,7 @@ run:
 	/* TODO: data flow with cols/rows is weird... and broken! the geometry
 	 * string could change size, but tinit doesn't know that */
 	tinit(cols, rows);
-	xinit(cols, rows, title, font);
+	xinit(cols, rows, title, name, font);
 	run(shell);
 
 	return 0;

@@ -14,6 +14,11 @@
 /* TODO replace fprintf stderr calls with errlog function */
 /* TODO use consistent terminology: the keyboard cursor is the "cursor" and
  * the mouse pointer is the "pointer" */
+/* TODO it would be cool if the terminal stuff was completly independent of the
+ * X stuff and could be instantiated multiple times (so no global variables).
+ * This would allow, e.g., using the terminal code as a general terminal
+ * backend that we could use for a graphical terminal emulator, a terminal
+ * multiplexer like tmux/screen/dvtm, etc. */
 
 
 #define UTF_INVALID 0xFFFD
@@ -224,19 +229,17 @@ typedef struct {
 	int l, t; /* left and top offset */
 	int gm; /* geometry mask */
 	char *title;
+	char *name;
 } XWindow;
 
 
 /* st.c */
-extern char *opt_class;
 extern char **opt_cmd;
 extern char *opt_embed;
-extern char *opt_font;
 extern char *opt_geom;
 extern int opt_fixed;
 extern char *opt_io;
 extern char *opt_line;
-extern char *opt_name;
 
 extern char *defaultfont;
 extern char *defaultshell;
@@ -348,5 +351,5 @@ void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);
 void xximspot(int, int);
-void xinit(int, int, char *, char *);
+void xinit(int, int, char *, char *, char *);
 int xstart(void);
