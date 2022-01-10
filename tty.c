@@ -210,7 +210,6 @@ static void drawregion(int, int, int, int);
 char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
 char *vtiden = "\033[?6c"; /* VT102 */
 wchar_t *worddelimiters = L" "; /* E.g., L" `'\"()[]{}" */
-int allowaltscreen = 1;
 int allowwindowops = 0; /* Allow certain insecure window operations (e.g.,
                            set the clipboard text. */
 uint tabspaces = 4; /* Must keep in sync with terminfo file. */
@@ -1296,14 +1295,10 @@ tsetmode(int priv, int set, const int *args, int narg)
 			              not relevant with libtermkey encodings. */
 				break;
 			case 1049: /* swap screen & set/restore cursor as xterm */
-				if (!allowaltscreen)
-					break;
 				tcursor((set) ? CURSOR_SAVE : CURSOR_LOAD);
 				/* FALLTHROUGH */
 			case 47: /* swap screen */
 			case 1047:
-				if (!allowaltscreen)
-					break;
 				alt = IS_SET(MODE_ALTSCREEN);
 				if (alt)
 					tclearregion(0, 0, term.col-1, term.row-1);

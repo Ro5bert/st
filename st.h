@@ -264,7 +264,6 @@ size_t csienc(char *, size_t, uint, uint, uint, char);
 extern char *stty_args;
 extern char *vtiden;
 extern wchar_t *worddelimiters;
-extern int allowaltscreen;
 extern int allowwindowops;
 extern uint tabspaces;
 
