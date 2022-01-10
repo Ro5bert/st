@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <pwd.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -208,6 +207,14 @@ static void tstrsequence(uchar);
 static void drawregion(int, int, int, int);
 
 /* Globals */
+char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
+char *vtiden = "\033[?6c"; /* VT102 */
+wchar_t *worddelimiters = L" "; /* E.g., L" `'\"()[]{}" */
+int allowaltscreen = 1;
+int allowwindowops = 0; /* Allow certain insecure window operations (e.g.,
+                           set the clipboard text. */
+uint tabspaces = 4; /* Must keep in sync with terminfo file. */
+
 static Term term;
 static Selection sel;
 static CSIEscape csiescseq;
@@ -477,42 +484,17 @@ tlinelen(int y)
 void
 execsh(char *cmd, char **args)
 {
-	char *sh, *prog, *arg;
-	const struct passwd *pw;
-
-	errno = 0;
-	if ((pw = getpwuid(getuid())) == NULL) {
-		if (errno)
-			die("getpwuid failed: %s\n", strerror(errno));
-		else
-			die("who are you? (password file entry not found)\n");
-	}
-
-	if ((sh = getenv("SHELL")) == NULL)
-		sh = (pw->pw_shell[0]) ? pw->pw_shell : cmd;
-
-	if (args) {
-		prog = args[0];
-		arg = NULL;
-	} else if (scroll) {
-		prog = scroll;
-		arg = utmp ? utmp : sh;
-	} else if (utmp) {
-		prog = utmp;
-		arg = NULL;
-	} else {
-		prog = sh;
-		arg = NULL;
-	}
-	DEFAULT(args, ((char *[]) {prog, arg, NULL}));
+	DEFAULT(args, ((char *[]) {cmd, NULL}));
 
 	unsetenv("COLUMNS");
 	unsetenv("LINES");
 	unsetenv("TERMCAP");
-	setenv("LOGNAME", pw->pw_name, 1);
-	setenv("USER", pw->pw_name, 1);
-	setenv("SHELL", sh, 1);
-	setenv("HOME", pw->pw_dir, 1);
+	/* XXX: do we need this? Isn't this login's job? Removed during
+	 * refactoring for now */
+	/* setenv("LOGNAME", pw->pw_name, 1); */
+	/* setenv("USER", pw->pw_name, 1); */
+	/* setenv("SHELL", sh, 1); */
+	/* setenv("HOME", pw->pw_dir, 1); */
 	setenv("TERM", termname, 1);
 
 	signal(SIGCHLD, SIG_DFL);
@@ -522,7 +504,7 @@ execsh(char *cmd, char **args)
 	signal(SIGTERM, SIG_DFL);
 	signal(SIGALRM, SIG_DFL);
 
-	execvp(prog, args);
+	execvp(cmd, args);
 	_exit(1);
 }
 
@@ -2337,7 +2319,7 @@ tinit(int col, int row)
 }
 
 int
-tstart(void)
+tstart(char *shell)
 {
 	return ttynew(opt_line, shell, opt_io, opt_cmd);
 }

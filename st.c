@@ -2,10 +2,13 @@
 
 #include <errno.h>
 #include <locale.h>
+#include <pwd.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/select.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
@@ -13,6 +16,31 @@
 #include "arg.h"
 
 static void usage(void);
+
+/* Font selection priority:
+ * 1. -f option
+ * 2. defaultfont variable */
+char *defaultfont = "monospace:pixelsize=32:antialias=true:autohint=true";
+
+/* Terminal client priority:
+ * 1. -e option
+ * 2. SHELL environment variable
+ * 3. user shell in /etc/passwd
+ * 4. defaultshell variable */
+char *defaultshell = "/bin/sh";
+
+/* Terminal size priority:
+ * 1. whatever the user/window manager forces
+ * 2. -g option
+ * 3. defaultcols and defaultrows variables*/
+uint defaultcols = 80;
+uint defaultrows = 24;
+
+double minlatency = 8;     /* Minimum time the window is dirty in ms. */
+double maxlatency = 33;    /* Maximum time the window is dirty in ms. */
+double blinktimeout = 800; /* Half blink period in ms; 0 to disable blink.*/
+
+char *termname = "st-256color";
 
 char *argv0;
 
@@ -37,8 +65,31 @@ usage(void)
 		argv0, argv0);
 }
 
+char *
+resolveshell(void)
+{
+	char *sh;
+	struct passwd *pw;
+
+	/* 1. Check $SHELL */
+	if (sh = getenv("SHELL"))
+		return sh;
+
+	/* 2. Check /etc/passwd */
+	errno = 0;
+	pw = getpwuid(getuid());
+	if (pw == NULL)
+		die("getpwuid failed: %s\n",
+				errno ? strerror(errno) : "password file entry not found");
+	if (pw->pw_shell[0])
+		return pw->pw_shell;
+
+	/* 3. Fallback to default */
+	return defaultshell;
+}
+
 void
-run(void)
+run(char *shell)
 {
 	int xfd, tfd;
 	int dirty, drawing;
@@ -48,7 +99,7 @@ run(void)
 	XEvent ev;
 
 	xfd = xstart();
-	tfd = tstart();
+	tfd = tstart(shell);
 
 	timeout = -1;
 	drawing = 0;
@@ -120,7 +171,7 @@ run(void)
 
 		/* Idle detected or maxlatency exhausted, so draw. */
 		timeout = -1;
-		if (blinktimeout && tattrset(ATTR_BLINK)) {
+		if (blinktimeout > 0 && tattrset(ATTR_BLINK)) {
 			timeout = blinktimeout - TIMEDIFF(now, lastblink);
 			if (timeout <= 0) {
 				if (-timeout > blinktimeout) /* start visible */
@@ -142,6 +193,8 @@ int
 main(int argc, char **argv)
 {
 	uint cols, rows;
+	char *font = defaultfont;
+	char *shell = resolveshell();
 
 	ARGBEGIN {
 	case 'a':
@@ -155,7 +208,7 @@ main(int argc, char **argv)
 			--argc, ++argv;
 		goto run;
 	case 'f':
-		opt_font = EARGF(usage());
+		font = EARGF(usage());
 		break;
 	case 'g':
 		opt_geom = EARGF(usage());
@@ -195,12 +248,13 @@ run:
 
 	setlocale(LC_CTYPE, "");
 	XSetLocaleModifiers(""); /* TODO: move to X land */
-	/* TODO: data flow with cols/rows is weird */
+	/* TODO: data flow with cols/rows is weird... and broken! the geometry
+	 * string could change size, but tinit doesn't know that */
 	cols = MAX(defaultcols, 1);
 	rows = MAX(defaultrows, 1);
 	tinit(cols, rows);
-	xinit(cols, rows);
-	run();
+	xinit(cols, rows, font);
+	run(shell);
 
 	return 0;
 }

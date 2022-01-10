@@ -1,7 +1,7 @@
 /* See LICENSE for license details. */
 /* Requires: stdint.h, size_t */
 
-/* TODO: replace all ints used as bools with bool from stdbool. Looking in git
+/* TODO replace all ints used as bools with bool from stdbool. Looking in git
  * history, st used to use bools, but someone replaced all of them with ints
  * without real justification. The benefit in code clearity with bools instead
  * of ints is significant. */
@@ -10,10 +10,34 @@
 /* TODO test alignment by changing tab size and checking nothing is fucked */
 /* TODO rewrite text rendering? see suckless libdraw in dwm/dmenu */
 /* TODO rename x-related functions */
+/* TODO remove const */
+/* TODO replace fprintf stderr calls with errlog function */
+/* TODO use consistent terminology: the keyboard cursor is the "cursor" and
+ * the mouse pointer is the "pointer" */
 
 
 #define UTF_INVALID 0xFFFD
 #define UTF_SIZ     4
+
+
+/* State used to match key/button/motion events. */
+#define CURS (1<<0) /* Application cursor mode */
+#define KPAD (1<<1) /* Application keypad mode */
+#define NMLK (1<<2) /* Num lock */
+#define RELS (1<<3) /* Key/button release; always 0 for motion events */
+/* To allow checking more boolean properties when matching key/button events,
+ * define them above, increment MODOFFS, and modify evtctx as needed. */
+#define MODOFFS 4
+#define SHFT (ShiftMask<<MODOFFS)
+#define CTRL (ControlMask<<MODOFFS)
+#define ALT  (Mod1Mask<<MODOFFS)
+#define BTN1 (Button1Mask<<MODOFFS)
+#define BTN2 (Button2Mask<<MODOFFS)
+#define BTN3 (Button3Mask<<MODOFFS)
+#define BTN4 (Button4Mask<<MODOFFS)
+#define BTN5 (Button5Mask<<MODOFFS)
+#define KMOD (SHFT|CTRL|ALT)
+#define KEXCL(m) (KMOD&~(m))
 
 
 #define MIN(a, b)              ((a) < (b) ? (a) : (b))
@@ -31,12 +55,75 @@
 #define IS_TRUECOLOR(x)        (1 << 24 & (x))
 
 
-typedef unsigned char uchar;
+typedef unsigned char  uchar;
 typedef unsigned short ushort;
-typedef unsigned int uint;
-typedef unsigned long ulong;
+typedef unsigned int   uint;
+typedef unsigned long  ulong;
 
-typedef uint_least32_t Rune;
+typedef int_least8_t  i8;
+typedef int_least16_t i16;
+typedef int_least32_t i32;
+typedef int_least64_t i64;
+
+typedef uint_least8_t  u8;
+typedef uint_least16_t u16;
+typedef uint_least32_t u32;
+typedef uint_least64_t u64;
+
+typedef u32 Rune;
+
+typedef union {
+	int i;
+	uint u;
+	double d;
+	const void *v;
+	struct {
+		uint  l; /* Length of s, excluding null */
+		const char *s;
+	} str;
+	struct {
+		uint n; /* First parameter; ignored if 0 or 1 */
+		uint m; /* State bits to ignore when encoding as CSI */
+		char c;
+	} csi;
+} Arg;
+#define ARG_STR(s_)       { .str.l = sizeof(s_)-1, .str.s = (s_) }
+#define ARG_CSI(n_,m_,c_) { .csi.n = (n_), .csi.m = (m_), .csi.c = (c_) }
+#define ARG_DUMMY         { .i = 0 }
+
+typedef struct {
+	/* TODO use fixed size ints; we need a certain number of bits */
+	uint m;   /* boolean properties, particularly keyboard modifiers */
+	int x, y; /* cursor position */
+} EvtCtx;
+
+typedef void (*Handler)(Arg, EvtCtx);
+
+/* Tristate logic: each bit in set/clr is interpreted as follows:
+ * set  clr
+ *  0    0    don't care
+ *  0    1    bit must be clear
+ *  1    0    bit must be set
+ *  1    1    unsatisfiable (i.e., useless configuration) */
+
+typedef struct {
+	uint btn;
+	uint set, clr;
+	Handler fn;
+	Arg arg;
+} Btn;
+
+typedef struct {
+	KeySym sym;
+	uint set, clr;
+	Handler fn;
+	Arg arg;
+} Key;
+
+typedef struct {
+	int type;
+	uint set, clr;
+} SelType;
 
 enum glyph_attribute {
 	ATTR_NULL       = 0,
@@ -139,11 +226,6 @@ typedef struct {
 } XWindow;
 
 
-/* TODO temporary */
-#include <X11/Xlib.h>
-#include "config.h" 
-
-
 /* st.c */
 extern char *opt_class;
 extern char **opt_cmd;
@@ -155,6 +237,15 @@ extern char *opt_io;
 extern char *opt_line;
 extern char *opt_name;
 extern char *opt_title;
+
+extern char *defaultfont;
+extern char *defaultshell;
+extern uint defaultcols;
+extern uint defaultrows;
+extern double minlatency;
+extern double maxlatency;
+extern double blinktimeout;
+extern char *termname;
 
 
 /* util.c */
@@ -170,6 +261,13 @@ size_t csienc(char *, size_t, uint, uint, uint, char);
 
 
 /* tty.c */
+extern char *stty_args;
+extern char *vtiden;
+extern wchar_t *worddelimiters;
+extern int allowaltscreen;
+extern int allowwindowops;
+extern uint tabspaces;
+
 void selinit(void); /* TODO needn't be in here */
 void selclear(void);
 void selstart(int, int, int);
@@ -193,15 +291,40 @@ size_t ttyread(void);
 void ttyresize(int, int);
 void ttywrite(const char *, size_t, int);
 void tinit(int, int);
-int tstart(void);
+int tstart(char *);
 
 
 /* win.c */
+extern void (*handler[LASTEvent])(XEvent *);
+
+extern int borderpx;
+extern float cwscale;
+extern float chscale;
+extern uint doubleclicktimeout;
+extern uint tripleclicktimeout;
+extern uint cursorthickness;
+extern int bellvolume;
+extern uint mouseshape;
+extern uint mousefg;
+extern uint mousebg;
+extern uint defaultattr;
+extern const char *colorname[];
+extern uint defaultfg;
+extern uint defaultbg;
+extern uint defaultcs;
+extern uint defaultrcs;
+extern uint cursorshape;
+
 /* TODO temp; these shouldn't be public probably */
 extern TermWindow win;
 extern XWindow xw;
 extern XSelection xsel;
-extern void (*handler[LASTEvent])(XEvent *);
+
+extern Btn btns[];
+extern Key keys[];
+extern SelType seltypes[];
+
+EvtCtx evtctx(uint xstate, int rels, int x, int y);
 int xtocol(int);
 int ytorow(int);
 void mousesel(EvtCtx, int);
@@ -225,5 +348,5 @@ void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);
 void xximspot(int, int);
-void xinit(int, int);
+void xinit(int, int, char *);
 int xstart(void);

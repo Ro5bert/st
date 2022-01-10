@@ -4,7 +4,7 @@
 
 include config.mk
 
-SRC = st.c win.c tty.c config.c util.c
+SRC = st.c win.c tty.c util.c
 OBJ = $(SRC:.c=.o)
 
 all: options st
@@ -15,20 +15,10 @@ options:
 	@echo "LDFLAGS = $(STLDFLAGS)"
 	@echo "CC      = $(CC)"
 
-config.c:
-	cp config.def.c config.c
-config.h:
-	cp config.def.h config.h
-
 .c.o:
 	$(CC) $(STCFLAGS) -c $<
 
-# TODO
-st.o: config.h st.h
-win.o: config.h st.h
-tty.o: config.h st.h
-config.o: config.h st.h
-util.o: config.h st.h
+%.o: st.h
 
 $(OBJ): config.mk
 

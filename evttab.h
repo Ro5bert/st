@@ -1,16 +1,5 @@
 /* See LICENSE file for license details. */
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <time.h>
-#include <wchar.h>
-#include <X11/Xlib.h>
-#include <X11/cursorfont.h>
-#include <X11/keysym.h>
-#include <X11/Xft/Xft.h>
-
-#include "st.h"
-
 static void selstart_(Arg, EvtCtx); /* TODO come up with a better name */
 static void selstop(Arg, EvtCtx);
 static void clipcopy(Arg, EvtCtx);
@@ -26,138 +15,16 @@ static void selprint(Arg, EvtCtx);
 static void sendbreak(Arg, EvtCtx);
 static void togprinter(Arg, EvtCtx);
 
-/* See: http://freedesktop.org/software/fontconfig/fontconfig-user.html */
-char *font = "monospace:pixelsize=32:antialias=true:autohint=true";
-int borderpx = 2;
-/* Letterspacing / character bounding-box multipliers */
-float cwscale = 1.0;
-float chscale = 1.0;
-
-/* What program is execed by st depends of these precedence rules:
- * 1: program passed with -e
- * 2: scroll and/or utmp
- * 3: SHELL environment variable
- * 4: user shell in /etc/passwd
- * 5: shell in config.c */
-char *shell = "/bin/sh";
-char *utmp = 0;
-/* scroll program: to enable use a string like "scroll" */
-char *scroll = 0;
-char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
-
-/* identification sequence returned in DA and DECID */
-char *vtiden = "\033[?6c";
-
-wchar_t *worddelimiters = L" "; /* E.g., L" `'\"()[]{}" */
-
-/* selection timeouts (in milliseconds) */
-uint doubleclicktimeout = 300;
-uint tripleclicktimeout = 600;
-
-int allowaltscreen = 1;
-
-/* allow certain non-interactive (insecure) window operations, such as
-   setting the clipboard text */
-int allowwindowops = 0;
-
-/* draw latency range in ms - from new content/keypress/etc until drawing.
- * within this range, st draws when content stops arriving (idle). mostly it's
- * near minlatency, but it waits longer for slow updates to avoid partial draw.
- * low minlatency will tear/flicker more, as it can "detect" idle too early. */
-double minlatency = 8;
-double maxlatency = 33;
-
-/* blinking timeout (set to 0 to disable blinking) for the terminal blinking
- * attribute. */
-uint blinktimeout = 800;
-
-/* thickness of underline and bar cursors */
-uint cursorthickness = 2;
-
-/* bell volume. It must be a value between -100 and 100.
- * Use 0 to disable it. */
-int bellvolume = 0;
-
-char *termname = "st-256color";
-
-/* spaces per tab
- * When you are changing this value, don't forget to adapt the »it« value in
- * the st.info and appropriately install the st.info in the environment where
- * you use this st version.
- * Secondly make sure your kernel is not expanding tabs. When running
- * `stty -a`, »tab0« should appear. You can tell the terminal to not expand
- * tabs by running `stty tabs`. */
-uint tabspaces = 4;
-
-/* Terminal colors (16 first used in escape sequence) */
-/* TODO switch to rgb only */
-const char *colorname[] = {
-	/* 8 normal colors */
-	"black",
-	"red3",
-	"green3",
-	"yellow3",
-	"blue2",
-	"magenta3",
-	"cyan3",
-	"gray90",
-
-	/* 8 bright colors */
-	"gray50",
-	"red",
-	"green",
-	"yellow",
-	"#5c5cff",
-	"magenta",
-	"cyan",
-	"white",
-
-	[255] = 0,
-
-	/* more colors can be added after 255 to use with defaultXX */
-	"#f8f8f2",
-	"#1c1c1c",
-	"#cccccc",
-	"#555555",
-	0,
-};
-
-/* Default colors (colorname index)
- * foreground, background, cursor, reverse cursor */
-uint defaultfg = 256;
-uint defaultbg = 257;
-uint defaultcs = 258;
-uint defaultrcs = 259;
-
-/* Default shape of cursor
- * 2: Block ("█")
- * 4: Underline ("_")
- * 6: Bar ("|")
- * 7: Snowman ("☃") */
-uint cursorshape = 2;
-
-uint defaultcols = 80;
-uint defaultrows = 24;
-
-/* Default colour and shape of the mouse cursor */
-uint mouseshape = XC_xterm;
-uint mousefg = 7;
-uint mousebg = 0;
-
-/* Color used to display font attributes when fontconfig selected a font which
- * doesn't match the ones requested. */
-uint defaultattr = 11;
-
-#define R RELS
-#define S SHFT
-#define C CTRL
-#define A ALT
 #define TERMMOD (CTRL|SHFT)
 #define SENDSTR(s_)    sendstr, .arg = ARG_STR((s_))
 #define SENDCSI(n,m,c) sendcsi, .arg = ARG_CSI((n),(m),(c))
 #define SENDTILDE(n)    SENDCSI((n),0,'~')
 #define SENDUNICODE(cp) SENDCSI((cp),S,'u')
-#define ARG_DUMMY {.i = 0}
+
+#define R RELS
+#define S SHFT
+#define C CTRL
+#define A ALT
 
 Btn btns[] = {
 	{ Button1,  0,           R,  selstart_, ARG_DUMMY  },
@@ -311,19 +178,10 @@ SelType seltypes[] = {
 	{ 0 },
 };
 
-EvtCtx
-evtctx(uint xstate, int rels, int x, int y)
-{
-	return (EvtCtx){
-		.m = (win.appcursor ? CURS : 0)
-			| (win.appkeypad ? KPAD : 0)
-			| (win.numlock ? NMLK : 0)
-			| (rels ? RELS : 0)
-			| (xstate << MODOFFS),
-		.x = x,
-		.y = y,
-	};
-}
+#undef R
+#undef S
+#undef C
+#undef A
 
 void
 selstart_(Arg arg, EvtCtx ctx)

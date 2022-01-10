@@ -13,6 +13,7 @@
 #include <libgen.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/cursorfont.h>
 #include <X11/keysym.h>
 #include <X11/Xft/Xft.h>
 #include <X11/XKBlib.h>
@@ -167,6 +168,66 @@ void (*handler[LASTEvent])(XEvent *) = {
 };
 
 /* Globals */
+int borderpx = 2;
+float cwscale = 1.0; /* Glyph width multiplier */
+float chscale = 1.0; /* Glyph height multiplier */
+uint doubleclicktimeout = 300; /* Must double-click within this many ms */
+uint tripleclicktimeout = 600; /* Must triple-click within this many ms */
+uint cursorthickness = 2; /* Thickness of underline and bar cursor in px. */
+int bellvolume = 0; /* In range [-100,100]; 0 to disable bell. */
+uint mouseshape = XC_xterm;
+uint mousefg = 7;
+uint mousebg = 0;
+uint defaultattr = 11; /* Color used to display font attributes when
+                          fontconfig selected a font which doesn't match
+                          the ones requested. XXX what? */
+
+/* Terminal colors (16 first used in escape sequence) */
+/* TODO switch to rgb only */
+const char *colorname[] = {
+	/* 8 normal colors */
+	"black",
+	"red3",
+	"green3",
+	"yellow3",
+	"blue2",
+	"magenta3",
+	"cyan3",
+	"gray90",
+
+	/* 8 bright colors */
+	"gray50",
+	"red",
+	"green",
+	"yellow",
+	"#5c5cff",
+	"magenta",
+	"cyan",
+	"white",
+
+	[255] = 0,
+
+	/* more colors can be added after 255 to use with defaultXX */
+	"#f8f8f2",
+	"#1c1c1c",
+	"#cccccc",
+	"#555555",
+	0,
+};
+
+/* Default colors (colorname index) */
+uint defaultfg  = 256; /* foreground */
+uint defaultbg  = 257; /* background */
+uint defaultcs  = 258; /* cursor */
+uint defaultrcs = 259; /* reverse cursor */
+
+/* Default shape of cursor
+ * 2: Block ("█")
+ * 4: Underline ("_")
+ * 6: Bar ("|")
+ * 7: Snowman ("☃") */
+uint cursorshape = 2;
+
 static DC dc;
 XWindow xw;
 XSelection xsel;
@@ -204,6 +265,22 @@ static char ascii_printable[] =
 	" !\"#$%&'()*+,-./0123456789:;<=>?"
 	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
 	"`abcdefghijklmnopqrstuvwxyz{|}~";
+
+#include "evttab.h"
+
+EvtCtx
+evtctx(uint xstate, int rels, int x, int y)
+{
+	return (EvtCtx){
+		.m = (win.appcursor ? CURS : 0)
+			| (win.appkeypad ? KPAD : 0)
+			| (win.numlock ? NMLK : 0)
+			| (rels ? RELS : 0)
+			| (xstate << MODOFFS),
+		.x = x,
+		.y = y,
+	};
+}
 
 int
 dosym(KeySym sym, EvtCtx ctx)
@@ -1646,7 +1723,7 @@ xbell(void)
 }
 
 void
-xinit(int cols, int rows)
+xinit(int cols, int rows, char *font)
 {
 	XGCValues gcvalues;
 	Cursor cursor;
@@ -1672,7 +1749,7 @@ xinit(int cols, int rows)
 	if (!FcInit())
 		die("fontconfig init failed\n");
 
-	usedfont = (opt_font == NULL) ? font : opt_font;
+	usedfont = font;
 	xloadfonts(usedfont, 0);
 
 	/* colors */
