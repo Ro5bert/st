@@ -1007,11 +1007,11 @@ xhints(void)
 		sizeh->min_width = sizeh->max_width = win.w;
 		sizeh->min_height = sizeh->max_height = win.h;
 	}
-	if (xw.gm & (XValue|YValue)) {
+	if (xw.forcedpos) {
 		sizeh->flags |= USPosition | PWinGravity;
 		sizeh->x = xw.l;
 		sizeh->y = xw.t;
-		sizeh->win_gravity = xgeommasktogravity(xw.gm);
+		sizeh->win_gravity = xw.gravity;
 	}
 
 	XSetWMProperties(xw.dpy, xw.win, NULL, NULL, NULL, 0, sizeh, &wm, &class);
@@ -1730,15 +1730,18 @@ xinit(int cols, int rows, char *title, char *name, char *font)
 	Window parent;
 	pid_t thispid = getpid();
 	XColor xmousefg, xmousebg;
+	int gm = 0;
 
 	/* XXX: check this (moved from main) */
 	xw.l = xw.t = 0;
 	xw.isfixed = opt_fixed;
 	xsetcursor(cursorshape);
 
-	if (opt_geom)
-		xw.gm = XParseGeometry(opt_geom, &xw.l, &xw.t,
+	if (geom)
+		gm = XParseGeometry(geom, &xw.l, &xw.t,
 				(uint*) &cols, (uint*) &rows);
+	xw.gravity = xgeommasktogravity(gm);
+	xw.forcedpos = gm & (XValue|YValue);
 
 	if (!(xw.dpy = XOpenDisplay(NULL)))
 		die("open display failed\n");
@@ -1759,9 +1762,9 @@ xinit(int cols, int rows, char *title, char *name, char *font)
 	/* adjust fixed window geometry */
 	win.w = 2 * borderpx + cols * win.cw;
 	win.h = 2 * borderpx + rows * win.ch;
-	if (xw.gm & XNegative)
+	if (gm & XNegative)
 		xw.l += DisplayWidth(xw.dpy, xw.scr) - win.w - 2;
-	if (xw.gm & YNegative)
+	if (gm & YNegative)
 		xw.t += DisplayHeight(xw.dpy, xw.scr) - win.h - 2;
 
 	/* Events */
